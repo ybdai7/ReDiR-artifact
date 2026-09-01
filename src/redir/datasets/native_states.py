@@ -15,7 +15,7 @@ from jsonschema import Draft7Validator
 
 import yaml
 
-from redir.datasets.mtagentrisk_v47_teacher import native_message_completion
+from redir.datasets.native_messages import native_message_completion
 from redir.server.native_messages import normalize_native_messages
 from redir.engine.actions import has_visible_refusal
 
@@ -528,8 +528,12 @@ def build_native_states(
             "available_tool_names": tool_names,
             "protocol_source": "native",
             "native_tool_calling": True,
-            "v6_native_real_state": True,
-            "v6_native_domain": domain,
+            "native_real_state": True,
+            "native_domain": domain,
+            "native_state_candidate": True,
+            "native_safety_candidate": domain == "safety",
+            "native_benign_candidate": domain in {"benign", "identity"},
+            "native_identity_candidate": domain == "identity",
             "rollout_seed": rollout_seed,
             "rollout_policy": str(rollout_policy),
             "source_task_path": str(spec.task_path),
@@ -567,17 +571,13 @@ def build_native_states(
             "native_history_tool_messages": audit["tool_messages"],
             "latest_user_contains_final_turn": is_actual_final_turn,
             "latest_user_is_actual_final_turn": is_actual_final_turn,
-            "v6_native_state_candidate": True,
-            "v6_native_safety_candidate": domain == "safety",
-            "v6_native_benign_candidate": domain == "benign",
-            "v72_native_identity_candidate": domain == "identity",
         }
         records.append(record)
 
     tasks = {str(row["task_key"]) for row in records}
     duplicate_prompts = len(records) - len({str(row["source_prompt_sha256"]) for row in records})
     stats = {
-        "strategy": "v6_native_real_state_extraction_v1",
+        "strategy": "native_real_state_extraction",
         "domain": domain,
         "protocol_source": "native",
         "native_tool_calling": True,

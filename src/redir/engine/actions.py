@@ -52,12 +52,11 @@ def v6_task_balanced_benign_tool_records(
 ) -> list[dict[str, Any]]:
     """Select one audited productive native tool state per benign task.
 
-    Legacy datasets do not carry ``v6_native_real_state`` and retain the old
-    task-balanced behavior.  A native-real dataset must be homogeneous and
-    uses only non-finish tool states from judge-COMPLETE trajectories.
+    A native-real dataset must be homogeneous and uses only non-finish tool
+    states from the freshly collected benign task pool.
     """
 
-    native_flags = [bool(record.get("v6_native_real_state")) for record in records]
+    native_flags = [bool(record.get("native_real_state")) for record in records]
     if any(native_flags):
         groups = v6_ordered_benign_tool_candidate_groups(records, seed=seed)
         return [group[0] for group in groups[:state_count] if group]
@@ -82,7 +81,7 @@ def v6_ordered_benign_tool_candidate_groups(
     to reorder them from post-update behavior.
     """
 
-    native_flags = [bool(record.get("v6_native_real_state")) for record in records]
+    native_flags = [bool(record.get("native_real_state")) for record in records]
     if not records or not any(native_flags):
         raise ValueError("V6 native benign candidate groups require native-real states")
     if not all(native_flags):
@@ -91,7 +90,7 @@ def v6_ordered_benign_tool_candidate_groups(
     candidates = [
         record
         for record in records
-        if str(record.get("source_post_eval_outcome") or "") == "COMPLETE"
+        if record.get("source_post_eval_outcome") in (None, "", "COMPLETE")
         and not bool(record.get("observed_contains_refusal"))
         and str(record.get("observed_first_function_name") or "")
         not in {"", "finish"}

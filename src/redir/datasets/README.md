@@ -1,12 +1,11 @@
-# Data Layer
+# Dataset utilities
 
-This package will hold project-owned schemas and converters.
+This package contains only the data code used by the public ReDiR pipeline:
 
-Planned components:
+- `native_messages.py`: reconstruct native Qwen completions;
+- `native_states.py`: extract training states from fresh rollout logs;
+- `identity.py`: select safe benign completions for identity warmup;
+- `target_contract.py`: validate teacher targets before training;
+- `tools.py`: declare the filesystem tools used during evaluation.
 
-- MT-AgentRisk task loader.
-- OpenHands trajectory parser.
-- Decision-point schema.
-- Collapsed teacher view builder.
-- Train/test split and no-leakage checks.
-
+No frozen dataset or historical experiment builder is included.

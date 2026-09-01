@@ -39,7 +39,7 @@ import base64
 import openai
 import requests
 import yaml
-from redir.datasets.mtagentrisk_final_state_rounds import (
+from redir.datasets.tools import (
     tool_names_for_dependencies,
     tool_schemas_for_names,
 )

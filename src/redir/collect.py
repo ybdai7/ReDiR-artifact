@@ -297,7 +297,7 @@ def _run_rollouts(
 def _partition_completion_logs(
     raw_root: Path, task_roots: dict[str, Path], output: Path
 ) -> dict[str, Path]:
-    from redir.datasets.mtagentrisk_v6_native_states import (
+    from redir.datasets.native_states import (
         identify_task,
         load_task_specs,
     )
@@ -330,7 +330,7 @@ def _extract_states(
     output: Path,
     seed: int,
 ) -> dict[str, list[dict[str, Any]]]:
-    from redir.datasets.mtagentrisk_v6_native_states import build_native_states
+    from redir.datasets.native_states import build_native_states
 
     results: dict[str, list[dict[str, Any]]] = {}
     for split in task_roots:
@@ -356,9 +356,9 @@ def _extract_states(
 def _identity_dataset(
     states: dict[str, list[dict[str, Any]]], output: Path
 ) -> tuple[Path, Path]:
-    from redir.datasets.mtagentrisk_v73_safe_identity import (
-        V73SafeIdentitySource,
-        build_v73_safe_identity_dataset,
+    from redir.datasets.identity import (
+        SafeIdentitySource,
+        build_safe_identity_dataset,
     )
 
     source_dir = output / "identity_sources"
@@ -367,15 +367,14 @@ def _identity_dataset(
     _write_jsonl(train_source, states["benign_train"])
     _write_jsonl(dev_source, states["benign_dev"])
     identity_dir = output / "identity"
-    stats = build_v73_safe_identity_dataset(
+    stats = build_safe_identity_dataset(
         [
-            V73SafeIdentitySource("train", 42, train_source, None),
-            V73SafeIdentitySource("dev", 42, dev_source, None),
+            SafeIdentitySource("train", 42, train_source, None),
+            SafeIdentitySource("dev", 42, dev_source, None),
         ],
         output_dir=identity_dir,
         expected_train_tasks=8,
         expected_dev_tasks=2,
-        allow_global_lifecycle_backfill=False,
     )
     if not stats["records"]["train"] or not stats["records"]["dev"]:
         raise RuntimeError("identity collection produced an empty split")

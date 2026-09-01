@@ -1,4 +1,4 @@
-"""Build the audited safe full-completion dataset for V7.3."""
+"""Select safe, productive benign completions for identity warmup."""
 
 from __future__ import annotations
 
@@ -18,14 +18,14 @@ from redir.server.qwen_native_protocol import parse_qwen_native_response
 
 
 @dataclass(frozen=True, slots=True)
-class V73SafeIdentitySource:
+class SafeIdentitySource:
     split: str
     seed: int
     path: Path
     allowed_task_keys: frozenset[str] | None = None
 
 
-def _sha256_json(value: Any) -> str:
+def _json_hash(value: Any) -> str:
     payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -48,7 +48,7 @@ def _lifecycle_bucket(record: dict[str, Any]) -> str | None:
     return None
 
 
-def v73_tool_argument_errors(
+def _tool_argument_errors(
     tool_calls: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None,
 ) -> list[str]:
@@ -68,11 +68,7 @@ def v73_tool_argument_errors(
             continue
         arguments = function.get("arguments")
         try:
-            arguments = (
-                json.loads(arguments or "{}")
-                if isinstance(arguments, str)
-                else arguments
-            )
+            arguments = json.loads(arguments or "{}") if isinstance(arguments, str) else arguments
         except json.JSONDecodeError as exc:
             errors.append(f"tool_calls[{index}] arguments are invalid JSON: {exc}")
             continue
@@ -89,9 +85,13 @@ def v73_tool_argument_errors(
 def _audit_productive_benign(record: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
     if record.get("protocol_source") != "native" or not record.get("native_tool_calling"):
         return False, "not_genuine_native", {}
-    if not record.get("v6_native_benign_candidate"):
+    if not (
+        record.get("native_identity_candidate")
+        or record.get("native_benign_candidate")
+    ):
         return False, "not_benign_candidate", {}
-    if record.get("source_post_eval_outcome") != "COMPLETE":
+    outcome = record.get("source_post_eval_outcome")
+    if outcome not in (None, "", "COMPLETE"):
         return False, "post_eval_not_complete", {}
     if record.get("observed_contains_refusal"):
         return False, "contains_refusal", {}
@@ -105,8 +105,6 @@ def _audit_productive_benign(record: dict[str, Any]) -> tuple[bool, str, dict[st
     elif "<|tool_call>" in completion:
         parsed = parse_gemma_native_response(completion, tools)
     elif "<tool_call" in completion or "<function=" in completion:
-        # State extraction persists a protocol-neutral Qwen-shaped canonical
-        # view even when the raw model completion used Mistral/Gemma markers.
         parsed = parse_qwen_native_response(
             completion,
             tools,
@@ -130,7 +128,7 @@ def _audit_productive_benign(record: dict[str, Any]) -> tuple[bool, str, dict[st
     names = [str((call.get("function") or {}).get("name") or "") for call in parsed.tool_calls]
     if not names or any(not name or name not in declared for name in names):
         return False, "unknown_or_empty_tool_name", {}
-    if v73_tool_argument_errors(parsed.tool_calls, tools):
+    if _tool_argument_errors(parsed.tool_calls, tools):
         return False, "invalid_tool_arguments", {}
     bucket = _lifecycle_bucket(record)
     if bucket is None:
@@ -143,13 +141,12 @@ def _audit_productive_benign(record: dict[str, Any]) -> tuple[bool, str, dict[st
     }
 
 
-def build_v73_safe_identity_dataset(
-    sources: Iterable[V73SafeIdentitySource],
+def build_safe_identity_dataset(
+    sources: Iterable[SafeIdentitySource],
     *,
     output_dir: Path,
     expected_train_tasks: int,
     expected_dev_tasks: int,
-    allow_global_lifecycle_backfill: bool = False,
 ) -> dict[str, Any]:
     caps = {"initial": 1, "after_tool": 2, "pre_finish": 1}
     candidates: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -157,7 +154,7 @@ def build_v73_safe_identity_dataset(
     source_stats: list[dict[str, Any]] = []
     for source in sources:
         if source.split not in {"train", "dev"}:
-            raise ValueError(f"invalid V7.3 split: {source.split}")
+            raise ValueError(f"invalid identity split: {source.split}")
         rows = _load_jsonl(source.path)
         source_stats.append(
             {
@@ -166,18 +163,10 @@ def build_v73_safe_identity_dataset(
                 "path": str(source.path.resolve()),
                 "records": len(rows),
                 "sha256": hashlib.sha256(source.path.read_bytes()).hexdigest(),
-                "allowed_task_keys": (
-                    sorted(source.allowed_task_keys)
-                    if source.allowed_task_keys is not None
-                    else None
-                ),
             }
         )
         for raw in rows:
-            if (
-                source.allowed_task_keys is not None
-                and str(raw.get("task_key") or "") not in source.allowed_task_keys
-            ):
+            if source.allowed_task_keys is not None and str(raw.get("task_key") or "") not in source.allowed_task_keys:
                 continue
             admitted, reason, audit = _audit_productive_benign(raw)
             if not admitted:
@@ -187,8 +176,7 @@ def build_v73_safe_identity_dataset(
             row.update(audit)
             row.update(
                 {
-                    "split": source.split,
-                    "v73_category": "productive_benign",
+                    "category": "productive_benign",
                     "productive_benign": True,
                     "clean_refusal": False,
                     "harmful_tool_call_executed": False,
@@ -197,8 +185,6 @@ def build_v73_safe_identity_dataset(
                     "capitulated_after_refusal": False,
                     "training_eligible": True,
                     "exclusion_reason": "",
-                    "protocol_source": "native",
-                    "native_tool_calling": True,
                     "attack_success_record": False,
                     "dangerous_completion_gradient_used": False,
                     "heldout15_used": False,
@@ -206,20 +192,17 @@ def build_v73_safe_identity_dataset(
                     "completion_sha256": hashlib.sha256(
                         str(raw["observed_completion"]).encode("utf-8")
                     ).hexdigest(),
-                    "messages_hash": _sha256_json(raw.get("student_state_messages") or []),
-                    "tools_hash": _sha256_json(raw.get("available_tools") or []),
+                    "messages_hash": _json_hash(raw.get("student_state_messages") or []),
+                    "tools_hash": _json_hash(raw.get("available_tools") or []),
                 }
             )
             candidates[source.split].append(row)
 
     selected: dict[str, list[dict[str, Any]]] = {"train": [], "dev": []}
-    global_backfill: dict[str, list[dict[str, str]]] = {"train": [], "dev": []}
-    duplicate_prompt_counts: Counter[str] = Counter()
     for split in ("train", "dev"):
         by_task_bucket: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(
             lambda: defaultdict(list)
         )
-        prompt_counts: Counter[str] = Counter()
         for row in sorted(
             candidates[split],
             key=lambda value: (
@@ -228,121 +211,37 @@ def build_v73_safe_identity_dataset(
                 str(value["state_id"]),
             ),
         ):
-            prompt_hash = str(row.get("source_prompt_sha256") or "")
-            if not prompt_hash:
-                raise ValueError(f"V7.3 record misses source_prompt_sha256: {row['state_id']}")
-            prompt_counts[prompt_hash] += 1
-            key = str(row["task_key"])
-            by_task_bucket[key][str(row["lifecycle_bucket"])].append(row)
-        duplicate_prompt_counts[split] = sum(
-            count - 1 for count in prompt_counts.values() if count > 1
-        )
+            by_task_bucket[str(row["task_key"])][str(row["lifecycle_bucket"])].append(row)
         for task_key in sorted(by_task_bucket):
             for bucket in ("initial", "after_tool", "pre_finish"):
-                selected[split].extend(
-                    by_task_bucket[task_key][bucket][: caps[bucket]]
-                )
-
-        if allow_global_lifecycle_backfill:
-            expected_tasks = (
-                expected_train_tasks if split == "train" else expected_dev_tasks
-            )
-            selected_ids = {str(row["state_id"]) for row in selected[split]}
-            task_counts = Counter(str(row["task_key"]) for row in selected[split])
-            for bucket in ("initial", "after_tool", "pre_finish"):
-                target = expected_tasks * caps[bucket]
-                present = sum(
-                    str(row["lifecycle_bucket"]) == bucket
-                    for row in selected[split]
-                )
-                deficit = target - present
-                if deficit <= 0:
-                    continue
-                pool_by_id: dict[str, dict[str, Any]] = {}
-                for row in candidates[split]:
-                    state_id = str(row["state_id"])
-                    if (
-                        str(row["lifecycle_bucket"]) == bucket
-                        and state_id not in selected_ids
-                    ):
-                        pool_by_id.setdefault(state_id, row)
-                pool = list(pool_by_id.values())
-                for _ in range(deficit):
-                    if not pool:
-                        raise ValueError(
-                            f"V7.3 {split} cannot backfill lifecycle {bucket}: "
-                            f"target={target} present={present}"
-                        )
-                    pool.sort(
-                        key=lambda row: (
-                            task_counts[str(row["task_key"])],
-                            str(row["task_key"]),
-                            int(row.get("rollout_seed") or 0),
-                            str(row["state_id"]),
-                        )
-                    )
-                    source = pool.pop(0)
-                    row = deepcopy(source)
-                    row["v73_global_lifecycle_backfill"] = True
-                    row["v73_global_lifecycle_backfill_bucket"] = bucket
-                    selected[split].append(row)
-                    state_id = str(row["state_id"])
-                    selected_ids.add(state_id)
-                    task_key = str(row["task_key"])
-                    task_counts[task_key] += 1
-                    global_backfill[split].append(
-                        {
-                            "state_id": state_id,
-                            "task_key": task_key,
-                            "bucket": bucket,
-                        }
-                    )
+                selected[split].extend(by_task_bucket[task_key][bucket][: caps[bucket]])
 
     train_tasks = {str(row["task_key"]) for row in selected["train"]}
     dev_tasks = {str(row["task_key"]) for row in selected["dev"]}
     if train_tasks & dev_tasks:
-        raise ValueError(f"V7.3 train/dev task overlap: {sorted(train_tasks & dev_tasks)}")
-    if len(train_tasks) != expected_train_tasks:
-        raise ValueError(
-            f"V7.3 train task coverage {len(train_tasks)} != {expected_train_tasks}"
-        )
-    if len(dev_tasks) != expected_dev_tasks:
-        raise ValueError(f"V7.3 dev task coverage {len(dev_tasks)} != {expected_dev_tasks}")
+        raise ValueError(f"identity train/dev task overlap: {sorted(train_tasks & dev_tasks)}")
+    expected = {"train": expected_train_tasks, "dev": expected_dev_tasks}
+    actual = {"train": len(train_tasks), "dev": len(dev_tasks)}
+    if actual != expected:
+        raise ValueError(f"identity task coverage mismatch: {actual} != {expected}")
 
     output_dir.mkdir(parents=True, exist_ok=False)
     for split in ("train", "dev"):
         (output_dir / f"{split}.jsonl").write_text(
-            "".join(
-                json.dumps(row, ensure_ascii=False) + "\n" for row in selected[split]
-            ),
+            "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in selected[split]),
             encoding="utf-8",
         )
     stats = {
-        "strategy": "v73_native_boundary_safe_identity_v1",
+        "strategy": "native_safe_identity",
         "sources": source_stats,
         "records": {split: len(selected[split]) for split in ("train", "dev")},
-        "tasks": {"train": len(train_tasks), "dev": len(dev_tasks)},
+        "tasks": actual,
         "lifecycle": {
             split: dict(Counter(str(row["lifecycle_bucket"]) for row in selected[split]))
             for split in ("train", "dev")
         },
-        "categories": {
-            split: dict(Counter(str(row["v73_category"]) for row in selected[split]))
-            for split in ("train", "dev")
-        },
-        "caps_per_task_across_all_rollout_seeds": caps,
-        "global_lifecycle_backfill": {
-            "enabled": allow_global_lifecycle_backfill,
-            "rows": global_backfill,
-            "counts": {
-                split: dict(Counter(row["bucket"] for row in global_backfill[split]))
-                for split in ("train", "dev")
-            },
-        },
+        "caps_per_task": caps,
         "exclusions": dict(exclusions),
-        "duplicate_prompts_retained_across_independent_seeds": dict(
-            duplicate_prompt_counts
-        ),
         "dangerous_completion_gradient_used": False,
         "attack_success_records_in_optimizer": 0,
         "heldout15_used": False,
@@ -353,3 +252,6 @@ def build_v73_safe_identity_dataset(
         encoding="utf-8",
     )
     return stats
+
+
+__all__ = ["SafeIdentitySource", "build_safe_identity_dataset"]

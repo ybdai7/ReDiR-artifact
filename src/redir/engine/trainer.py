@@ -25,10 +25,10 @@ import torch.nn.functional as F
 from torch.optim import AdamW, SGD, Optimizer
 from transformers import GenerationConfig
 
-from redir.datasets.mtagentrisk_v79 import (
-    V79_FORMAT_INSTRUCTION,
-    V79_FORMAT_INSTRUCTION_SHA256,
-    load_v79_frozen_target_contract,
+from redir.datasets.target_contract import (
+    FORMAT_INSTRUCTION,
+    FORMAT_INSTRUCTION_SHA256,
+    load_frozen_target_contract,
 )
 from redir.eval.mtagentrisk.turn_protocol import (
     ProtocolState,
@@ -8937,8 +8937,8 @@ class MaskedOpdTrainer:
                     != "v79_canonical_single_turn_native_format_elicitation"
                     or metadata.get("elicited_with_format_instruction") is not True
                     or metadata.get("format_instruction_sha256")
-                    != V79_FORMAT_INSTRUCTION_SHA256
-                    or V79_FORMAT_INSTRUCTION not in str(messages[1].get("content") or "")
+                    != FORMAT_INSTRUCTION_SHA256
+                    or FORMAT_INSTRUCTION not in str(messages[1].get("content") or "")
                 ):
                     raise ValueError(f"V7.9 format elicitation metadata failed: {task_key}")
                 format_instructed_tasks.append(task_key)
@@ -8951,7 +8951,7 @@ class MaskedOpdTrainer:
                 f"{self.v79_expected_format_instructed_task_count}"
             )
 
-        contract = load_v79_frozen_target_contract(
+        contract = load_frozen_target_contract(
             target_path=self.v79_frozen_target_dir / "v78_valid_native_targets.jsonl",
             availability_path=(
                 self.v79_frozen_target_dir / "v78_task_target_availability.jsonl"
@@ -8980,7 +8980,7 @@ class MaskedOpdTrainer:
         for record in train_records:
             task_key = str(record.get("task_key") or "")
             student_messages = record.get("student_state_messages") or []
-            if V79_FORMAT_INSTRUCTION in json.dumps(student_messages, ensure_ascii=False):
+            if FORMAT_INSTRUCTION in json.dumps(student_messages, ensure_ascii=False):
                 raise ValueError(f"V7.9 teacher-only format instruction leaked: {task_key}")
             targets = self._v78_targets_by_task.get(task_key, [])
             availability = dict(self._v78_availability_by_task[task_key])
@@ -9107,7 +9107,7 @@ class MaskedOpdTrainer:
         if self.v79_enabled and self.v79_stage == "target_recovery":
             assert self.v79_base_target_dir is not None
             assert self.v79_recoverable_audit_path is not None
-            recovery_contract = load_v79_frozen_target_contract(
+            recovery_contract = load_frozen_target_contract(
                 target_path=(
                     self.v79_base_target_dir / "v78_valid_native_targets.jsonl"
                 ),
@@ -9179,8 +9179,8 @@ class MaskedOpdTrainer:
                     )
                 if is_recovery_task and (
                     view_meta.get("format_instruction_sha256")
-                    != V79_FORMAT_INSTRUCTION_SHA256
-                    or V79_FORMAT_INSTRUCTION
+                    != FORMAT_INSTRUCTION_SHA256
+                    or FORMAT_INSTRUCTION
                     not in str(messages[1].get("content") or "")
                 ):
                     raise ValueError(f"V7.9 recovery instruction missing: {task_key}")
@@ -9275,7 +9275,7 @@ class MaskedOpdTrainer:
                                     {
                                         "elicited_with_format_instruction": True,
                                         "format_instruction_sha256": (
-                                            V79_FORMAT_INSTRUCTION_SHA256
+                                            FORMAT_INSTRUCTION_SHA256
                                         ),
                                         "v79_recovery_task": True,
                                     }
@@ -26555,7 +26555,7 @@ class MaskedOpdTrainer:
         ]
         benign_candidate_groups: list[list[dict[str, Any]]] = []
         if self.v6_benign_retention_enabled and any(
-            bool(row.get("v6_native_real_state")) for row in all_benign_records
+            bool(row.get("native_real_state")) for row in all_benign_records
         ):
             benign_candidate_groups = v6_ordered_benign_tool_candidate_groups(
                 all_benign_records,
@@ -28633,10 +28633,10 @@ class MaskedOpdTrainer:
         """Use every record once while keeping tasks unique within an update."""
         rng = random.Random(seed)
         benign = [
-            row for row in records if row.get("v73_category") == "productive_benign"
+            row for row in records if row.get("category") == "productive_benign"
         ]
         refusals = [
-            row for row in records if row.get("v73_category") == "clean_refusal"
+            row for row in records if row.get("category") == "clean_refusal"
         ]
         if len(refusals) / max(len(records), 1) > 0.20 + 1e-12:
             raise ValueError("V7.3 clean-refusal fraction exceeds 20%")
@@ -28763,7 +28763,7 @@ class MaskedOpdTrainer:
         metrics = {
             "state_id": str(record.get("state_id") or ""),
             "task_key": str(record.get("task_key") or ""),
-            "category": str(record.get("v73_category") or ""),
+            "category": str(record.get("category") or ""),
             "completion_tokens": int(completion_ids.numel()),
             "identity_reverse_kl": float(loss.detach().cpu()),
             "position0_reverse_kl_no_aux_gradient": float(
@@ -28809,7 +28809,7 @@ class MaskedOpdTrainer:
             raise ValueError(f"V7.3 {split} dataset is empty")
         clean_refusals = 0
         for record in records:
-            category = str(record.get("v73_category") or "")
+            category = str(record.get("category") or "")
             clean_refusals += int(category == "clean_refusal")
             if (
                 record.get("protocol_source") != "native"
@@ -29115,7 +29115,7 @@ class MaskedOpdTrainer:
                     "global_step": global_step,
                     "task_keys": [str(record["task_key"]) for record in group],
                     "record_categories": [
-                        str(record["v73_category"]) for record in group
+                        str(record["category"]) for record in group
                     ],
                     "records": len(group),
                     "completion_token_count": sum(
@@ -29238,7 +29238,7 @@ class MaskedOpdTrainer:
                     or (
                         role == "identity_main"
                         and (
-                            not record.get("v72_native_identity_candidate")
+                            not record.get("native_identity_candidate")
                             or not isinstance(
                                 record.get("v72_position0_candidate"),
                                 bool,
@@ -29249,8 +29249,9 @@ class MaskedOpdTrainer:
                         role == "benign_retention"
                         and (
                             split != "train"
-                            or not record.get("v6_native_benign_candidate")
-                            or record.get("source_post_eval_outcome") != "COMPLETE"
+                            or not record.get("native_benign_candidate")
+                            or record.get("source_post_eval_outcome")
+                            not in (None, "", "COMPLETE")
                         )
                     )
                 ):

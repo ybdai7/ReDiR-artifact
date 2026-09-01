@@ -1,5 +1,1 @@
-"""Data schemas and conversion utilities for decision-point examples."""
-
-from redir.datasets.mtagentrisk_opd_pairs import BuildConfig, OpdPair, materialize_dataset
-
-__all__ = ["BuildConfig", "OpdPair", "materialize_dataset"]
+"""Data-collection utilities used by ReDiR's public pipeline."""

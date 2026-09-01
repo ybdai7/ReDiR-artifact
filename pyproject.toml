@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
   "aiohttp>=3.9",
   "json-repair>=0.20",
+  "jsonschema>=4.0",
   "openai>=1.0",
   "pydantic>=2.11,<3",
   "pyyaml>=6",

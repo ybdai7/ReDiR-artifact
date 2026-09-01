@@ -17,7 +17,17 @@ import yaml
 
 from redir.datasets.native_messages import native_message_completion
 from redir.server.native_messages import normalize_native_messages
-from redir.engine.actions import has_visible_refusal
+
+
+_REFUSAL_RE = re.compile(
+    r"\b(cannot|can't|will not|won't|unable to|refuse|decline|not able to)\b",
+    re.IGNORECASE,
+)
+
+
+def _has_visible_refusal(text: str) -> bool:
+    visible = text.rsplit("</think>", 1)[-1]
+    return _REFUSAL_RE.search(visible) is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,7 +228,7 @@ def _response_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "function_names": names,
         "first_function_name": names[0] if names else "",
         "finish_reason": finish_reason,
-        "contains_refusal": has_visible_refusal(completion),
+        "contains_refusal": _has_visible_refusal(completion),
     }
 
 
@@ -284,55 +294,6 @@ def _is_actual_final_turn_prompt(text: str) -> bool:
     return _FINAL_TURN_LINE.search(text) is not None
 
 
-def _load_successful_tasks(summary_path: Path | None) -> set[str] | None:
-    if summary_path is None:
-        return None
-    lines = [line for line in summary_path.read_text(encoding="utf-8").splitlines() if line]
-    if not lines:
-        return set()
-    columns = lines[0].split("\t")
-    result: set[str] = set()
-    for line in lines[1:]:
-        row = dict(zip(columns, line.split("\t"), strict=False))
-        if row.get("status") == "ok" and row.get("exit_code") == "0":
-            result.add(_normalize_task_key(str(row.get("task") or "")))
-    return result
-
-
-def _load_post_eval_outcomes(
-    post_eval_path: Path,
-) -> tuple[dict[str, str], dict[str, Any]]:
-    payload = json.loads(post_eval_path.read_text(encoding="utf-8"))
-    raw_results = payload.get("results")
-    if not isinstance(raw_results, dict) or not raw_results:
-        raise ValueError("post-eval result file has no per-task results")
-    outcomes: dict[str, str] = {}
-    for raw_task, raw_result in raw_results.items():
-        if not isinstance(raw_result, dict):
-            raise ValueError(f"post-eval result is malformed for {raw_task}")
-        task_key = _normalize_task_key(str(raw_task))
-        outcome = str(raw_result.get("outcome") or "").upper()
-        if not task_key or outcome not in {"COMPLETE", "REJECT", "FAILED"}:
-            raise ValueError(f"post-eval outcome is invalid for {raw_task}: {outcome!r}")
-        if task_key in outcomes:
-            raise ValueError(f"post-eval contains duplicate normalized task: {task_key}")
-        outcomes[task_key] = outcome
-    declared_total = payload.get("total_tasks")
-    if declared_total is not None and int(declared_total) != len(outcomes):
-        raise ValueError(
-            "post-eval total does not match per-task results: "
-            f"{declared_total} != {len(outcomes)}"
-        )
-    metadata = {
-        "judge_model": str(payload.get("judge_model") or ""),
-        "judge_base_url": str(payload.get("judge_base_url") or ""),
-        "judge_max_trajectory_chars": payload.get("judge_max_trajectory_chars"),
-        "judge_use_responses_api": payload.get("judge_use_responses_api"),
-        "judge_openrouter_provider": payload.get("judge_openrouter_provider"),
-        "judge_json_mode": payload.get("judge_json_mode"),
-    }
-    return outcomes, metadata
-
 
 def build_native_states(
     *,
@@ -340,71 +301,20 @@ def build_native_states(
     task_root: Path,
     domain: str,
     rollout_seed: int,
-    summary_path: Path | None = None,
     min_tools: int = 1,
     expected_tools: int | None = None,
     required_system_prefix: str | None = None,
     required_system_sha256: str | None = None,
     expected_task_count: int | None = None,
-    post_eval_path: Path | None = None,
-    required_post_eval_outcome: str | None = None,
-    required_post_eval_model: str | None = None,
-    exclude_task_keys: Iterable[str] = (),
     rollout_policy: str = "qwen35_9b_p3_base_native",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if domain not in {"safety", "benign", "identity"}:
         raise ValueError("domain must be safety, benign, or identity")
-    if (post_eval_path is None) != (required_post_eval_outcome is None):
-        raise ValueError(
-            "post_eval_path and required_post_eval_outcome must be provided together"
-        )
-    normalized_required_outcome = (
-        str(required_post_eval_outcome).upper()
-        if required_post_eval_outcome is not None
-        else None
-    )
-    if normalized_required_outcome not in {None, "COMPLETE", "REJECT", "FAILED"}:
-        raise ValueError(
-            f"invalid required post-eval outcome: {required_post_eval_outcome!r}"
-        )
-    if post_eval_path is not None and domain != "benign":
-        raise ValueError("post-eval admission is only supported for benign states")
-    if required_post_eval_model is not None and post_eval_path is None:
-        raise ValueError("required_post_eval_model requires post_eval_path")
     specs = load_task_specs(task_root)
-    spec_keys = {spec.task_key for spec in specs}
-    if post_eval_path is not None:
-        post_eval_outcomes, post_eval_metadata = _load_post_eval_outcomes(
-            post_eval_path
-        )
-    else:
-        post_eval_outcomes, post_eval_metadata = None, {}
-    if (
-        required_post_eval_model is not None
-        and post_eval_metadata.get("judge_model") != required_post_eval_model
-    ):
-        raise ValueError(
-            "post-eval judge model mismatch: "
-            f"{post_eval_metadata.get('judge_model')!r} != "
-            f"{required_post_eval_model!r}"
-        )
-    if post_eval_outcomes is not None and set(post_eval_outcomes) != spec_keys:
-        missing = sorted(spec_keys - set(post_eval_outcomes))
-        unexpected = sorted(set(post_eval_outcomes) - spec_keys)
-        raise ValueError(
-            "post-eval task coverage mismatch: "
-            f"missing={missing} unexpected={unexpected}"
-        )
-    excluded_tasks = {_normalize_task_key(str(key)) for key in exclude_task_keys}
-    unknown_exclusions = excluded_tasks - {spec.task_key for spec in specs}
-    if unknown_exclusions:
-        raise ValueError(f"unknown excluded task keys: {sorted(unknown_exclusions)}")
-    successful_tasks = _load_successful_tasks(summary_path)
     paths = sorted(raw_completion_dir.glob("*.json"))
     if not paths:
         raise ValueError(f"raw completion directory is empty: {raw_completion_dir}")
     loaded: list[tuple[float, Path, dict[str, Any], NativeTaskSpec]] = []
-    excluded_task_log_counts: Counter[str] = Counter()
     for path in paths:
         payload = json.loads(path.read_text(encoding="utf-8"))
         messages = payload.get("messages")
@@ -425,9 +335,6 @@ def build_native_states(
                     f"{actual_system_sha256} != {required_system_sha256}: {path}"
                 )
         spec = identify_task(messages, specs)
-        if spec.task_key in excluded_tasks:
-            excluded_task_log_counts[spec.task_key] += 1
-            continue
         loaded.append((float(payload.get("timestamp") or 0.0), path, payload, spec))
     loaded.sort(key=lambda item: (item[0], item[1].name))
 
@@ -482,15 +389,6 @@ def build_native_states(
         elif domain in {"benign", "identity"} and response["empty"]:
             exclusions[f"{domain}_observed_empty"] += 1
             continue
-        elif domain == "benign" and successful_tasks is not None and spec.task_key not in successful_tasks:
-            exclusions["benign_task_not_complete"] += 1
-            continue
-        elif (
-            post_eval_outcomes is not None
-            and post_eval_outcomes[spec.task_key] != normalized_required_outcome
-        ):
-            exclusions["benign_task_post_eval_not_admitted"] += 1
-            continue
         elif domain == "benign" and response["contains_refusal"]:
             # A successful trajectory can still contain a transient false
             # refusal.  Do not teach that response as benign retention data.
@@ -544,21 +442,6 @@ def build_native_states(
             "source_system_prompt_sha256": _text_sha256(
                 _flatten_content(messages[0].get("content"))
             ),
-            "source_post_eval_outcome": (
-                post_eval_outcomes.get(spec.task_key)
-                if post_eval_outcomes is not None
-                else None
-            ),
-            "source_post_eval_path": (
-                str(post_eval_path.resolve()) if post_eval_path is not None else None
-            ),
-            "source_post_eval_sha256": (
-                _file_sha256(post_eval_path) if post_eval_path is not None else None
-            ),
-            "source_post_eval_judge_model": post_eval_metadata.get("judge_model"),
-            "source_post_eval_judge_base_url": post_eval_metadata.get(
-                "judge_base_url"
-            ),
             "source_prompt_sha256": _json_sha256(
                 {"messages": normalized_messages, "tools": tools}
             ),
@@ -585,26 +468,10 @@ def build_native_states(
         "required_system_sha256": required_system_sha256,
         "expected_tools": expected_tools,
         "expected_task_count": expected_task_count,
-        "post_eval_path": (
-            str(post_eval_path.resolve()) if post_eval_path is not None else None
-        ),
-        "post_eval_sha256": (
-            _file_sha256(post_eval_path) if post_eval_path is not None else None
-        ),
-        "required_post_eval_outcome": normalized_required_outcome,
-        "required_post_eval_model": required_post_eval_model,
-        "post_eval_metadata": post_eval_metadata,
-        "post_eval_outcome_counts": (
-            dict(Counter(post_eval_outcomes.values()))
-            if post_eval_outcomes is not None
-            else {}
-        ),
         "rollout_seed": rollout_seed,
         "rollout_policy": str(rollout_policy),
         "raw_log_count": len(loaded),
         "source_raw_log_count": len(paths),
-        "excluded_task_keys": sorted(excluded_tasks),
-        "excluded_task_log_counts": dict(excluded_task_log_counts),
         "record_count": len(records),
         "task_count": len(tasks),
         "tasks": sorted(tasks),

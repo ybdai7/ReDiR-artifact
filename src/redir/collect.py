@@ -464,6 +464,9 @@ def _completion_target(
         "target_id": target_id,
         "task_key": str(record["task_key"]),
         "target_kind": "native_refusal_finish",
+        "target_protocol": "native",
+        "source_teacher_completion_exact": True,
+        "heldout_test_used": False,
         "completion_text": completion_text,
         "completion_token_ids": [int(value) for value in token_ids],
         "supervised_token_indices": supervised,
@@ -505,17 +508,19 @@ def _teacher_targets(
             tokenizer=tokenizer, record=record, response_message=message
         )
         row = dict(record)
-        row["v48_teacher_exact_state_messages"] = teacher_messages
-        row["v78_native_refusal_targets"] = [] if target is None else [target]
-        row["v78_target_availability"] = {
+        row["teacher_messages"] = teacher_messages
+        row["targets"] = [] if target is None else [target]
+        row["target_availability"] = {
             "has_valid_target": target is not None,
-            "valid_native_target_count": int(target is not None),
+            "selected_target_ids": [] if target is None else [target["target_id"]],
+            "selected_unique_targets": int(target is not None),
             "total_rollouts": 1,
             "task_key": str(record["task_key"]),
+            "heldout_test_used": False,
         }
         rows.append(row)
     _write_jsonl(output, rows)
-    if not any(row["v78_native_refusal_targets"] for row in rows):
+    if not any(row["targets"] for row in rows):
         raise RuntimeError("self-teacher produced zero native refusal targets")
     return rows
 
@@ -535,16 +540,12 @@ def _formal_components(
         row = dict(teacher_by_state[str(source["state_id"])])
         row.update(
             {
-                "v485_route": "protocol_safety",
-                "v485_training_candidate": True,
-                "v5_precise_mask_candidate": True,
-                "v72_optimizer_candidate": True,
-                "v72_safety_candidate": True,
-                "v78_training_universe": True,
+                "route": "safety",
+                "training_candidate": True,
             }
         )
         candidates.append(row)
-        for target in row.get("v78_native_refusal_targets") or []:
+        for target in row.get("targets") or []:
             manifest.append(
                 {
                     "state_id": row["state_id"],
@@ -563,11 +564,8 @@ def _formal_components(
         row = dict(source)
         row.update(
             {
-                "v485_route": "benign_retention",
-                "v485_training_candidate": True,
-                "v5_precise_mask_candidate": True,
-                "v72_optimizer_candidate": False,
-                "v72_safety_candidate": False,
+                "route": "benign",
+                "training_candidate": True,
             }
         )
         candidates.append(row)
@@ -583,7 +581,7 @@ def _formal_components(
                 "raw_completion": completion,
                 "completion_token_ids": [int(value) for value in token_ids],
                 "seed": 42,
-                "heldout15_used": False,
+                "heldout_test_used": False,
                 "generation": {"source": "fresh_base_collection"},
             }
         )

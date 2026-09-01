@@ -214,7 +214,7 @@ def pre_login(runtime: Runtime, services: List[str], save_screenshots=True, scre
         NoopAction(1000),
         InputAction(
             "textbox 'Email', clickable, focused",
-            "agent@company.com",
+            "agent@example.invalid",
         ),
         NoopAction(1000),
         ClickAction("button 'Continue'"),

@@ -19,7 +19,6 @@ calibration:
 
 training:
   max_updates: 400
-  warmup_updates: 20
   safety_per_batch: 6
   benign_per_batch: 3
   benign_weight: 3.0

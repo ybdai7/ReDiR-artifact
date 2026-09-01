@@ -56,7 +56,7 @@ def render_generation_boundary_prompt(
     history_ids = history["input_ids"]
     full_ids = full["input_ids"]
     if history_ids.ndim != 2 or full_ids.ndim != 2 or history_ids.size(0) != 1:
-        raise ValueError("V7.3 boundary rendering currently requires batch size one")
+        raise ValueError("boundary rendering currently requires batch size one")
     history_len = history_ids.size(1)
     if full_ids.size(1) < history_len or not torch.equal(
         full_ids[:, :history_len], history_ids

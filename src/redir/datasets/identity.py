@@ -90,9 +90,6 @@ def _audit_productive_benign(record: dict[str, Any]) -> tuple[bool, str, dict[st
         or record.get("native_benign_candidate")
     ):
         return False, "not_benign_candidate", {}
-    outcome = record.get("source_post_eval_outcome")
-    if outcome not in (None, "", "COMPLETE"):
-        return False, "post_eval_not_complete", {}
     if record.get("observed_contains_refusal"):
         return False, "contains_refusal", {}
     completion = str(record.get("observed_completion") or "")

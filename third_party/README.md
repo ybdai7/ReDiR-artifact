@@ -31,6 +31,6 @@ SKIP_VSCODE_BUILD=1 python -m pip install -e third_party/openhands
 python -m pip install -e third_party/mcpmark
 ```
 
-ToolShield and MemGen are included for provenance and source inspection; the
-ReDiR package contains the localized/adapted modules used by the public entry
-points.
+ToolShield and MemGen are included only for provenance and source inspection.
+The public pipeline imports the localized ReDiR implementation and the pinned
+OpenHands/MCPMark runtime.

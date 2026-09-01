@@ -108,8 +108,8 @@ def merge_candidate_states(
     for candidate in candidates:
         row = dict(candidate)
         state_id = str(row.get("state_id") or "")
-        route = str(row.get("v485_route") or row.get("route") or "")
-        if route == "protocol_safety":
+        route = str(row.get("route") or "")
+        if route == "safety":
             teacher = target_by_state.get(state_id)
             if teacher is None:
                 raise DataContractError(
@@ -120,10 +120,8 @@ def merge_candidate_states(
         row.setdefault("task_id", row.get("task_key"))
         row.setdefault("messages", row.get("student_state_messages"))
         row.setdefault("tools", row.get("available_tools"))
-        row.setdefault(
-            "route", "safety" if route == "protocol_safety" else "benign"
-        )
-        row.setdefault("targets", row.get("v78_native_refusal_targets") or [])
+        row.setdefault("route", route)
+        row.setdefault("targets", [])
         merged.append(row)
 
     missing = sorted(set(target_by_state) - observed_safety_states)
@@ -139,10 +137,10 @@ def _clean_teacher_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for source in rows:
         row = dict(source)
         row["task_id"] = source.get("task_key")
-        row["teacher_messages"] = source.get("v48_teacher_exact_state_messages") or []
-        row["targets"] = source.get("v78_native_refusal_targets") or []
-        row["availability"] = source.get("v78_target_availability") or {}
-        row["heldout_test_used"] = bool(source.get("heldout15_used"))
+        row["teacher_messages"] = source.get("teacher_messages") or []
+        row["targets"] = source.get("targets") or []
+        row["availability"] = source.get("target_availability") or {}
+        row["heldout_test_used"] = bool(source.get("heldout_test_used"))
         cleaned.append(row)
     return cleaned
 
@@ -216,7 +214,7 @@ def build_bundle(
     }
     manifest_payload = {
         "format": "redir-training-data",
-        "format_version": 1,
+        "format_version": 2,
         "source": source,
         "base_model_family": "qwen3.5-9b",
         "counts": {
@@ -266,13 +264,23 @@ def validate_bundle(root: str | Path) -> dict[str, Any]:
     if missing:
         raise DataContractError(f"training bundle is missing files: {missing}")
     manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
+    if manifest.get("format") != "redir-training-data" or manifest.get(
+        "format_version"
+    ) != 2:
+        raise DataContractError("training bundle must use ReDiR format version 2")
     counts = dict(manifest.get("counts") or {})
+    identity_train = read_jsonl(paths.identity_train)
+    identity_dev = read_jsonl(paths.identity_dev)
+    states = read_jsonl(paths.safety_states)
+    teacher_targets = read_jsonl(paths.teacher_targets)
+    pair_manifest = read_jsonl(paths.pair_manifest)
+    benign_completions = read_jsonl(paths.benign_completions)
     observed = {
-        "identity_train": len(read_jsonl(paths.identity_train)),
-        "identity_dev": len(read_jsonl(paths.identity_dev)),
-        "candidate_states": len(read_jsonl(paths.safety_states)),
-        "pair_manifest": len(read_jsonl(paths.pair_manifest)),
-        "benign_completions": len(read_jsonl(paths.benign_completions)),
+        "identity_train": len(identity_train),
+        "identity_dev": len(identity_dev),
+        "candidate_states": len(states),
+        "pair_manifest": len(pair_manifest),
+        "benign_completions": len(benign_completions),
     }
     mismatches = {
         key: {"expected": counts.get(key), "observed": value}
@@ -283,6 +291,40 @@ def validate_bundle(root: str | Path) -> dict[str, Any]:
         raise DataContractError(f"training bundle count mismatch: {mismatches}")
     if manifest.get("base_model_family") != "qwen3.5-9b":
         raise DataContractError("this release supports only qwen3.5-9b")
+    for split, rows in (("identity_train", identity_train), ("identity_dev", identity_dev)):
+        for row in rows:
+            if (
+                not row.get("state_id")
+                or not row.get("task_key")
+                or row.get("category") != "productive_benign"
+                or row.get("training_eligible") is not True
+            ):
+                raise DataContractError(f"{split} contains a non-final identity record")
+    for row in states:
+        if (
+            not row.get("state_id")
+            or not row.get("task_key")
+            or row.get("route") not in {"safety", "benign"}
+            or row.get("training_candidate") is not True
+            or not isinstance(row.get("student_state_messages"), list)
+            or not isinstance(row.get("available_tools"), list)
+            or not isinstance(row.get("targets"), list)
+        ):
+            raise DataContractError("safety_states contains a non-final training record")
+    for row in teacher_targets:
+        if (
+            not row.get("state_id")
+            or not isinstance(row.get("teacher_messages"), list)
+            or not isinstance(row.get("targets"), list)
+            or not isinstance(row.get("availability"), dict)
+        ):
+            raise DataContractError("teacher_targets contains a non-final target record")
+    for row in pair_manifest:
+        if not row.get("state_id") or not row.get("target_id"):
+            raise DataContractError("pair_manifest contains an invalid pair")
+    for row in benign_completions:
+        if not row.get("state_id") or not row.get("completion_token_ids"):
+            raise DataContractError("benign_completions contains an invalid completion")
     return manifest
 
 

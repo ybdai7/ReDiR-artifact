@@ -94,32 +94,21 @@ One invocation performs:
 1. collected-data normalization and schema validation;
 2. deterministic latent/Weaver initialization from the external base model;
 3. identity and benign-behavior warmup;
-4. portable pair-manifest and baseline-metric preparation;
+4. portable target-pair and benign-retention preparation;
 5. two 10-update learning-rate calibration arms;
 6. automatic learning-rate selection;
 7. 400-update safety training with benign retention;
 8. final checkpoint selection and creation of `runs/redir/final`.
 
 Only latent queries and Weaver LoRA parameters are trainable. The reasoner
-weights remain frozen. Training does not reuse any checkpoint, target cache, or
-trajectory bundled by the artifact.
+weights remain frozen. Training does not rely on any checkpoint, target cache,
+or trajectory bundled with the artifact.
 
 ## Data construction
 
-`src/redir/build.py` converts newly collected rows into the internal portable
-bundle used by training and validates the required fields and counts.
-
-The builder can be run independently:
-
-```bash
-python -m redir.build \
-  --source /path/to/collected \
-  --output /path/to/generated_bundle
-```
-
-The source tasks are read from the external MT-AgentRisk checkout. The vendored
-OpenHands, MCPMark, and ToolShield source trees provide the execution runtime;
-they do not contain previously collected trajectories.
+The collector builds and validates the complete portable training bundle from
+fresh MT-AgentRisk rollouts. The source tasks remain in the external benchmark
+checkout. No previously collected trajectory is included in this repository.
 
 ## Configuration
 
@@ -148,6 +137,10 @@ export REDIR_CHECKPOINT_PATH="$PWD/runs/redir/final"
 ./scripts/test.sh /path/to/MT-AgentRisk/task outputs/test_run
 ```
 
+The test script starts both the ReDiR endpoint and filesystem MCP server. By
+default it places the frozen reasoner on `cuda:0` and the Weaver on `cuda:1`;
+override `REDIR_DEVICE` and `REDIR_WEAVER_DEVICE` when needed.
+
 ## Source layout
 
 ```text
@@ -157,12 +150,11 @@ scripts/collect.sh       Fresh MT-AgentRisk collection entry point
 scripts/test.sh          Evaluation entry point
 src/redir/collect.py     Task split, rollout, self-teacher, and bundle collector
 src/redir/data.py        Data schema and validation
-src/redir/build.py       User-collected data builder
 src/redir/train.py       End-to-end training orchestrator
-src/redir/engine/        Internal implementation modules
+src/redir/engine/        Final warmup and safety training engine
 src/redir/models/        Latent model and native protocol integration
 src/redir/server/        OpenAI-compatible local model server
 src/redir/eval/          MT-AgentRisk evaluation integration
-src/redir/datasets/      State and target construction utilities
+src/redir/datasets/      Fresh-rollout state and identity utilities
 third_party/             Pinned collection/evaluation dependencies
 ```

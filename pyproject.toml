@@ -12,7 +12,6 @@ dependencies = [
   "aiohttp>=3.9",
   "json-repair>=0.20",
   "jsonschema>=4.0",
-  "openai>=1.0",
   "pydantic>=2.11,<3",
   "pyyaml>=6",
   "requests>=2.28",
@@ -21,15 +20,10 @@ dependencies = [
 
 [project.optional-dependencies]
 model = [
-  "accelerate>=1.10",
-  "datasets>=4.0",
-  "numpy>=2.1",
   "omegaconf>=2.3",
   "peft>=0.17",
   "safetensors>=0.6",
   "transformers>=4.55,<4.56",
-  "trl>=0.18",
-  "wandb>=0.21",
 ]
 eval = [
   "fastmcp==2.6.1",
@@ -46,6 +40,3 @@ redir-serve = "redir.server.openai_compatible:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.package-data]
-redir = ["*.yaml"]

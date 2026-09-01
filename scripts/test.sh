@@ -14,10 +14,11 @@ Required environment variables:
 
 Optional environment variables:
   REDIR_PYTHON            Python executable
-  REDIR_DEVICE            Reasoner device (default: cuda)
-  REDIR_WEAVER_DEVICE     Weaver device (default: REDIR_DEVICE)
+  REDIR_DEVICE            Reasoner device (default: cuda:0)
+  REDIR_WEAVER_DEVICE     Weaver device (default: cuda:1)
   REDIR_REUSE_SERVER      Use an existing endpoint on port 8010 when set to 1
   REDIR_SERVER_TIMEOUT    Health-check timeout in seconds (default: 180)
+  REDIR_FILESYSTEM_PORT   Filesystem MCP port (default: 19090)
   MTAGENTRISK_CONFIG      Evaluation TOML config
   SERVER_HOST             Hostname passed to MT-AgentRisk (default: localhost)
 EOF
@@ -36,6 +37,7 @@ SERVER_HOST="${SERVER_HOST:-localhost}"
 SERVER_URL="http://127.0.0.1:8010"
 SERVER_TIMEOUT="${REDIR_SERVER_TIMEOUT:-180}"
 REUSE_SERVER="${REDIR_REUSE_SERVER:-0}"
+FILESYSTEM_PORT="${REDIR_FILESYSTEM_PORT:-19090}"
 VENDOR_PYTHONPATH="$REPO_ROOT/third_party/openhands:$REPO_ROOT/third_party/mcpmark"
 
 [[ -n "$TASK_PATH" ]] || {
@@ -81,6 +83,7 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 SERVER_PID=""
+FILESYSTEM_PID=""
 
 cleanup() {
   local status=$?
@@ -89,7 +92,12 @@ cleanup() {
     kill -TERM "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   fi
+  if [[ -n "$FILESYSTEM_PID" ]] && kill -0 "$FILESYSTEM_PID" 2>/dev/null; then
+    kill -TERM "$FILESYSTEM_PID" 2>/dev/null || true
+    wait "$FILESYSTEM_PID" 2>/dev/null || true
+  fi
   rm -f "$OUTPUT_DIR/server.pid"
+  rm -f "$OUTPUT_DIR/filesystem.pid"
   exit "$status"
 }
 trap cleanup EXIT INT TERM
@@ -107,8 +115,8 @@ if [[ "$REUSE_SERVER" != "1" ]]; then
       --config "$SERVER_CONFIG" \
       --host 127.0.0.1 \
       --port 8010 \
-      --device "${REDIR_DEVICE:-cuda}" \
-      --weaver-device "${REDIR_WEAVER_DEVICE:-${REDIR_DEVICE:-cuda}}" \
+      --device "${REDIR_DEVICE:-cuda:0}" \
+      --weaver-device "${REDIR_WEAVER_DEVICE:-cuda:1}" \
       >"$OUTPUT_DIR/server.log" 2>&1 &
   SERVER_PID=$!
   printf '%s\n' "$SERVER_PID" > "$OUTPUT_DIR/server.pid"
@@ -131,12 +139,42 @@ else
   echo "Using existing ReDiR endpoint at $SERVER_URL/v1"
 fi
 
-echo "Running MT-AgentRisk task: $TASK_PATH"
 mkdir -p "$OUTPUT_DIR/shared_workspace"
+echo "Starting filesystem MCP on port $FILESYSTEM_PORT"
+env PYTHONPATH="$REPO_ROOT/src:$VENDOR_PYTHONPATH${PYTHONPATH:+:$PYTHONPATH}" \
+  "$PYTHON_BIN" -m redir.eval.mtagentrisk.mcp_server.filesystem_server \
+    --host 127.0.0.1 \
+    --port "$FILESYSTEM_PORT" \
+    --workspace "$OUTPUT_DIR/shared_workspace" \
+    >"$OUTPUT_DIR/filesystem.log" 2>&1 &
+FILESYSTEM_PID=$!
+printf '%s\n' "$FILESYSTEM_PID" > "$OUTPUT_DIR/filesystem.pid"
+
+deadline=$(( SECONDS + 60 ))
+until "$PYTHON_BIN" -c \
+  'import socket, sys; s=socket.socket(); s.settimeout(1); code=s.connect_ex((sys.argv[1], int(sys.argv[2]))); s.close(); raise SystemExit(code)' \
+  127.0.0.1 "$FILESYSTEM_PORT"; do
+  if ! kill -0 "$FILESYSTEM_PID" 2>/dev/null; then
+    echo "Filesystem MCP exited before becoming healthy" >&2
+    tail -n 80 "$OUTPUT_DIR/filesystem.log" >&2 || true
+    exit 3
+  fi
+  if (( SECONDS >= deadline )); then
+    echo "Filesystem MCP did not become healthy within 60 seconds" >&2
+    tail -n 80 "$OUTPUT_DIR/filesystem.log" >&2 || true
+    exit 3
+  fi
+  sleep 1
+done
+
+echo "Running MT-AgentRisk task: $TASK_PATH"
 env \
   PYTHONPATH="$REPO_ROOT/src:$VENDOR_PYTHONPATH${PYTHONPATH:+:$PYTHONPATH}" \
   MTAGENTRISK_SHARED_WORKSPACE="$OUTPUT_DIR/shared_workspace" \
   MCP_FS_DEST_DIR="$OUTPUT_DIR/shared_workspace" \
+  MCP_FILESYSTEM_HOST=127.0.0.1 \
+  MCP_FILESYSTEM_PORT="$FILESYSTEM_PORT" \
+  MTAGENTRISK_FORCE_MCP_FILESYSTEM=1 \
   NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,0.0.0.0}" \
   no_proxy="${no_proxy:-${NO_PROXY:-localhost,127.0.0.1,0.0.0.0}}" \
   "$PYTHON_BIN" -m redir.eval.mtagentrisk.run_eval \

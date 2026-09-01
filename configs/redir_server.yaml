@@ -1,0 +1,43 @@
+model:
+  model_name: "${oc.env:REDIR_MODEL_PATH}"
+  load_model_path: "${oc.env:REDIR_CHECKPOINT_PATH}"
+  attn_implementation: sdpa
+  max_prompt_aug_num: 1
+  max_inference_aug_num: 0
+  latent_injection_mode: before_assistant_generation_boundary
+  latent_init:
+    mode: token_set_average
+    seed: 42
+    noise_ratio: 0.02
+    scale_mode: token_norm_p50_over_sqrt_hidden
+    apply_to_prompt_latents: true
+    apply_to_inference_latents: true
+  latent_output_norm:
+    enabled: true
+    target_mode: token_norm_p50
+    target_scale: 1.0
+    eps: 1.0e-6
+  latent_projection:
+    mode: identity
+    require_matching_hidden_size: true
+  weaver:
+    model_name: "${oc.env:REDIR_MODEL_PATH}"
+    prompt_latents_len: 8
+    inference_latents_len: 8
+    lora_config:
+      r: 16
+      lora_alpha: 32
+      target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+      lora_dropout: 0.0
+      bias: none
+      task_type: CAUSAL_LM
+  trigger:
+    model_name: "${oc.env:REDIR_MODEL_PATH}"
+    active: false
+    lora_config:
+      r: 1
+      lora_alpha: 1
+      target_modules: [q_proj]
+      lora_dropout: 0.0
+      bias: none
+      task_type: CAUSAL_LM

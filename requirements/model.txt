@@ -1,0 +1,15 @@
+# Latent-memory/model training dependencies adapted from MemGen.
+#
+# Torch is intentionally not pinned here. Install the CUDA/CPU wheel matching
+# the target machine separately, then install this file.
+accelerate>=1.10
+datasets>=4.0
+numpy>=2.1
+omegaconf>=2.3
+peft>=0.17
+safetensors>=0.6
+transformers>=4.55,<4.56
+trl>=0.18
+wandb>=0.21
+wikipedia>=1.4
+

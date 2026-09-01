@@ -1,0 +1,1 @@
+from latent_safety.models.latent_memory.modeling import MemGenModel

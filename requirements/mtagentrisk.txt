@@ -1,0 +1,10 @@
+# Dependencies used by src/latent_safety/eval/mtagentrisk.
+#
+# OpenHands itself is installed by scripts/setup_local_venv.sh when
+# INSTALL_OPENHANDS=1, because the MT-AgentRisk harness expects a patched
+# OpenHands MCP client.
+fastmcp==2.6.1
+mcp==1.9.2
+psycopg2-binary==2.9.12
+pydantic-settings==2.9.1
+tomli; python_version < "3.11"

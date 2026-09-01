@@ -1,0 +1,35 @@
+model:
+  family: qwen3.5-9b
+  latent_tokens: 8
+  injection: assistant_boundary
+  lora_rank: 16
+  lora_alpha: 32
+
+warmup:
+  epochs: 5
+  learning_rate: 1.0e-5
+  records_per_update: 4
+
+calibration:
+  learning_rates: [2.0e-4, 3.0e-4]
+  updates_per_arm: 10
+  maximum_displacement: 1.0
+  maximum_target_ce_ratio: 1.005
+  maximum_benign_loss_ratio: 2.0
+
+training:
+  max_updates: 400
+  warmup_updates: 20
+  safety_per_batch: 6
+  benign_per_batch: 3
+  benign_weight: 3.0
+  gradient_clip: 1.0
+  checkpoint_interval: 50
+
+selection:
+  checkpoint_step: 200
+
+runtime:
+  cuda_devices: "0,1,2,3"
+  workers: 2
+  gpus_per_worker: 2

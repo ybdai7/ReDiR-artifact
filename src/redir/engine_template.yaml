@@ -1,0 +1,429 @@
+model:
+  model_name: null
+  load_model_path: null
+  attn_implementation: sdpa
+  max_prompt_aug_num: 1
+  max_inference_aug_num: 0
+  latent_injection_mode: before_assistant_generation_boundary
+  latent_init:
+    mode: token_set_average
+    seed: 42
+    noise_ratio: 0.02
+    scale_mode: token_norm_p50_over_sqrt_hidden
+    apply_to_prompt_latents: true
+    apply_to_inference_latents: true
+  latent_output_norm:
+    enabled: true
+    target_mode: token_norm_p50
+    target_scale: 1.0
+    eps: 1.0e-6
+  latent_projection:
+    mode: identity
+    require_matching_hidden_size: true
+  weaver:
+    model_name: null
+    prompt_latents_len: 8
+    inference_latents_len: 8
+    lora_config:
+      r: 16
+      lora_alpha: 32
+      target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+      lora_dropout: 0.0
+      bias: none
+      task_type: CAUSAL_LM
+  trigger:
+    model_name: null
+    active: false
+    lora_config:
+      r: 1
+      lora_alpha: 1
+      target_modules: [q_proj]
+      lora_dropout: 0.0
+      bias: none
+      task_type: CAUSAL_LM
+
+dataset:
+  train_path: null
+  dev_path: null
+  require_single_outcome: null
+  require_state_status: null
+  require_state_kinds: null
+  require_training_candidate: true
+  candidate_field: v5_precise_mask_candidate
+
+v5_precise_mask:
+  enabled: true
+  version: v7.9.7_fully_fitted_offline_control
+  experiment_arm: main_only
+  level_1_state_filter: true
+  level_2_stratum_filter:
+    c_weight: 1.0
+    b_weight: 1.0
+    a_weight: 1.0
+    unknown_weight: 1.0
+    confidence_threshold: 0.7
+  level_3_preference_gate: true
+  level_4_absolute_mass_weight: false
+  level_5_entry_forward_kl:
+    enabled: false
+    method: disabled
+    window_tokens: 16
+    weight_y1: 0.0
+    weight_y2: 0.0
+    apply_to_c_layer: false
+    apply_to_all_available_targets: false
+    allow_on_unusable_rollout: false
+  gradient_cap:
+    enabled: false
+    primary_branch: main
+    entry_to_main_ratio: 0.0
+    main_to_entry_ratio: 0.0
+    defer_entry_when_no_main: true
+  finish_scaffold:
+    enabled: false
+    weight: 0.0
+    gradient_ratio_cap: 0.0
+    require_y1_refusal: true
+    prefix_mode: canonical_empty_reasoning
+    target_mode: opening_only
+    max_message_tokens: 64
+    message_weight: 1.0
+    action_onset_weight: 1.0
+  position0_retention:
+    enabled: false
+    weight: 0.0
+    gradient_ratio_cap: 0.0
+  benign_retention:
+    enabled: true
+    initialization_admission: true
+    states: 20
+    rollouts_per_state: 1
+    max_tokens: 128
+    generation_retry_max_tokens: 4096
+    retention_do_sample: false
+    retention_temperature: 0.0
+    weight: 1.0
+    position0_enabled: false
+    position0_loss_fraction: 0.0
+    gradient_ratio_cap: 0.0
+    continuation_enabled: false
+    continuation_min_productive_action_rate: 0.85
+    continuation_max_false_refusal_rate: 0.15
+    gate_rollouts_per_state: 1
+    gate_max_action_drop: 0.15
+    gate_max_refusal_increase: 0.15
+    gate_min_productive_action_rate: 0.85
+    gate_max_false_refusal_rate: 0.15
+  gate:
+    seed_base: 7178000042
+    do_sample: false
+    temperature: 0.0
+    rollouts_per_state: 4
+    min_c_layer_rate_weak: 0.0
+    min_c_layer_rate_strong: 0.0
+    min_c_layer_absolute_count: 0
+    min_new_c_state_seed_count: 0
+    min_effective_task_count_weak: 0
+    min_effective_task_count_strong: 0
+    min_directional_mask_purity: 0.0
+    min_action_complete_rate: 0.0
+    max_invalid_rate: 1.0
+    max_empty_eos_rate: 1.0
+    max_lora_a_relative_delta: 1.0
+    max_lora_b_relative_delta: 1.0
+    min_refusal_finish_weak: 0
+    min_refusal_finish_strong: 0
+    min_scaffold_triggered: 0
+    min_pre_action_decision_rate_weak: 0.0
+    min_pre_action_decision_rate_strong: 0.0
+    min_refusal_before_tool_rate_weak: 0.0
+    min_refusal_before_tool_rate_strong: 0.0
+
+v71_native_hybrid:
+  enabled: false
+
+v72_native_identity_warmup:
+  enabled: false
+
+v72_stratified_opd:
+  enabled: true
+  dev_probe_enabled: false
+  start_round: 1
+  initial_rounds: 6
+  max_rounds: 6
+  states_per_round: 43
+  train_rollouts_per_state: 1
+  r0_rollouts_per_state: 4
+  post_probe_rollouts_per_state: 4
+  dev_sampled_rollouts: 4
+  train_seed_base: 7078000042
+  probe_seed_base: 7178000042
+  analysis_rounds: [1, 2, 3, 4, 5, 6]
+  benign_gate_rounds: [1, 2, 3, 4, 5, 6]
+  teacher_audit_only: false
+  stage0_only: false
+  position0_gradient_ratio_cap: 0.0
+  benign_gradient_ratio_cap: 0.0
+  teacher_audit:
+    seeds: [42, 43, 44, 45, 46, 47, 48, 49]
+    do_sample: true
+    temperature: 0.7
+    use_cache: true
+    context_mode: privileged_collapsed_native
+    route_mode: v78_target_availability_action_support
+    weak_weight: 1.0
+    target_profile: v78_raw_teacher_completion_v1
+  teacher_advantage:
+    near_zero_probability: 0.005
+    strict_teacher_probability: 0.05
+    minimum_log_odds_advantage: 0.6931471805599453
+  bridge:
+    ce_weight: 1.0
+    b_prefix_opd_weight: 1.0
+    c_reasoning_positions: 32
+    c_message_positions: 32
+    b_prefix_positions: 64
+    fkl_positions: 64
+  loss_schedule:
+    support_building_opd: 0.0
+    support_building_bridge: 1.0
+    support_building_self_distill: 0.0
+    hybrid_opd: 0.0
+    hybrid_bridge: 1.0
+    hybrid_self_distill: 0.0
+    extended_opd: 0.0
+    extended_bridge: 1.0
+    extended_self_distill: 0.0
+  optimizer:
+    max_actual_delta: 1.0e+3
+    calibrated_learning_rate: 1.0e-3
+
+v76_state_conditioned_opd:
+  enabled: false
+
+v78_canonical_target_action_support:
+  enabled: true
+  teacher_views_path: null
+  full_body_forward_kl: false
+  action_only_reverse_kl: false
+  target_audit:
+    max_per_task: 3
+    semantic_judge:
+      base_url: https://api.openai.com/v1
+      model: gpt-4.1-mini
+      api_key_file: null
+      cache_dir: null
+      minimum_confidence: 0.8
+      max_tokens: 512
+  action_support:
+    minimum_finish_probability: 0.05
+    minimum_finish_vs_observed_log_odds: 0.6931471805599453
+
+v79_ce_mode_creation:
+  enabled: true
+  stage: main
+  frozen_target_dir: null
+  base_target_dir: null
+  recoverable_audit_path: null
+  expected_target_count: 52
+  expected_supported_task_count: 28
+  expected_elicited_target_count: 0
+  expected_format_instructed_task_count: 9
+  r1_r0_replay:
+    enabled: false
+    source_dir: null
+    force_r0_panel: true
+    skip_r0_generation: true
+  resume_after_update:
+    enabled: false
+    completed_round: 1
+    source_train_dir: null
+    r0_checkpoint_dir: null
+    completed_checkpoint_dir: null
+    recovery_manifest_path: null
+    completed_probe_source_path: null
+    completed_probe_sha256: null
+
+v791_fixed_batch_multistep:
+  enabled: false
+  outer_cycles: 6
+  inner_max_steps: 40
+  plateau_relative_improvement: 5.0e-4
+  plateau_consecutive: 5
+  probe_rollouts_per_state: 4
+  route_seed_base: 7191000042
+  o1_minimum_ce_drop: 0.01
+  success_minimum_ce_drop: 0.05
+  success_minimum_c: 12
+  a_unlocked_delta: 1.0e-5
+  a_minimum_gradient_ratio: 1.05
+  a_minimum_b_ema_cosine: 0.5
+  a_cosine_window: 5
+  self_distill_weight: 0.0
+
+v792_fixed_data_minibatch:
+  enabled: false
+  source_v791_train_dir: null
+  batch_size: 5
+  max_epochs: 6
+  max_optimizer_steps: 84
+  eval_every_epochs: 2
+  pair_shuffle_seed: 7192000042
+  benign_shuffle_seed: 7192100042
+  gate_step: 42
+  gate_minimum_ce_drop: 0.01
+  success_minimum_ce_drop: 0.05
+  success_minimum_c: 12
+  a_unlocked_delta: 2.5e-6
+  a_minimum_gradient_ratio: 1.05
+  a_minimum_b_full_gradient_cosine: 0.5
+  r0_ce_relative_tolerance: 2.0e-4
+  self_distill_weight: 0.0
+
+v793_e2_joint_ab_minibatch:
+  enabled: false
+  source_v792_train_dir: null
+  resume_checkpoint_dir: null
+  resume_epoch: 1
+  resume_global_step: 14
+  a_delta: 2.5e-6
+  reset_a_ema: true
+
+v794_e3_to_e6_diagnostic_gates:
+  enabled: false
+  source_v793_train_dir: null
+  resume_checkpoint_dir: null
+  resume_epoch: 2
+  resume_global_step: 28
+  quality_gates_diagnostic_only: true
+
+
+v796_displacement_frontier:
+  enabled: false
+  manifest_path: null
+  r0_audit_path: null
+  frozen_benign_path: null
+  r0_metrics_path: null
+  gram_summary_path: null
+  displacement_milestones: [2, 4, 8, 12, 16, 20]
+  max_updates: 400
+  warmup_updates: 10
+  grad_clip_norm: 1.0
+  safety_per_batch: 6
+  benign_per_batch: 3
+  pair_shuffle_seed: 7195000042
+  benign_rotation_seed: 7195100042
+  benign_lambda_init: 1.0
+  benign_lambda_factor: 3.0
+  benign_lambda_max: 27.0
+  benign_hard_stop_productive: 12
+  success_min_c_total: 12
+  success_min_c_nontrained: 3
+  success_min_benign: 17
+  entry_token_weight: 4.0
+  entry_token_count: 16
+  decision_token_weight: 4.0
+  freeze_lora_a_fallback: false
+  smoke_test: false
+
+v797_fully_fitted_offline_control:
+  enabled: true
+  mode: formal
+  max_updates: 400
+  warmup_updates: 20
+  grad_clip_norm: 1.0
+  safety_per_batch: 6
+  benign_per_batch: 3
+  pair_shuffle_seed: 7197000042
+  benign_rotation_seed: 7197100042
+  benign_lambda: 3.0
+  soft_boundary: 7.5
+  hard_boundary: 8.5
+  trust_contraction: 0.5
+  boundary_patience: 3
+  fit_ce_target: 0.3
+  tf_eval_every: 50
+  behavior_eval_every: 100
+  behavior_round_indices: [0]
+  checkpoint_eval_global_step: 0
+  initial_max_new_tokens: 4096
+  retry_max_new_tokens: 8192
+  minimum_benign_productive: 17
+  maximum_token_limit_rate: 0.05
+  maximum_invalid_rate: 0.05
+  invalid_gate_diagnostic_only: false
+  minimum_action_complete_rate: 0.95
+  margin_tolerance: 0.25
+  reference_safe_think_plus_one_rate: 0.24854651162790697
+  reference_safe_family0_count: 47
+  reference_p2_think: -1.8173077035671434
+  reference_p2_dangerous: -3.9352679048772967
+  smoke_test: false
+
+v796_posthoc_diagnostics:
+  enabled: false
+  mode: cross_margin
+  checkpoint_label: V797
+  source_checkpoint_label: D8
+  round_indices: [0, 1, 2, 3]
+  probe_paths: []
+  initial_max_new_tokens: 4096
+  retry_max_new_tokens: 8192
+
+run:
+  seed: 42
+  repo_root: null
+  output_dir: null
+  device: cuda
+  train_weaver: true
+  train_trigger: false
+  gradient_checkpointing: true
+  distributed:
+    enabled: true
+    backend: gloo
+    gpus_per_worker: 2
+    expected_workers: 2
+    timeout_minutes: 120
+  training:
+    training_loop: v5_precise_mask_opd
+    branch_name: V797_fully_fitted_offline_control_filesystem55
+    rollout_source: on_policy
+    completion_source: on_policy
+    teacher_source: single_exact_state
+    loss_mode: v797_weighted_target_ce_plus_fixed_benign
+    state_source: saved_final_agent_state
+    mask_profile: v797_entry_decision_x4
+    mask_unknown_policy: skip
+    v6_protocol_mode: native
+    v6_native_target_profile: v78_raw_teacher_completion_v1
+    v6_expected_safety_states: 76
+    v6_expected_safety_tasks: 43
+    v6_early_stop_on_strong_gate: false
+    v485_protocol_aligned_two_transition: false
+    num_epochs: 1
+    optimizer_name: adamw
+    optimizer_weight_decay: 0.0
+    optimizer_momentum: 0.0
+    gradient_ema_beta: 0.0
+    learning_rate: 3.0e-4
+    lora_b_learning_rate_multiplier: 1.0
+    v5_trainable_scope: prompt_query_plus_lora_ab_last4_attn
+    v6_pack_entry_primary_states: false
+    v6_require_benign_retention_every_update: true
+    rollouts_per_state: 1
+    v5_main_rollouts_per_state: 1
+    v5_auxiliary_rollouts_per_state: 1
+    gradient_accumulation_states: 9
+    gradient_accumulation_steps: 9
+    do_sample: true
+    temperature: 0.7
+    max_new_tokens: 4096
+    initial_max_new_tokens: 4096
+    retry_max_new_tokens: 8192
+    retry_incomplete_action: true
+    skip_incomplete_after_retry: true
+    assistant_generation_prefix: "<think>\n"
+    v5_preflight_only: false
+    v5_gate_only: false
+    v5_preflight_states: 4
+    v5_preflight_epochs: 1

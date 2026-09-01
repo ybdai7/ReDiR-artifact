@@ -1,0 +1,9 @@
+# Runtime pins from OpenHands 0.54.0 poetry.lock that pip's editable install
+# otherwise resolves too new.
+google-cloud-aiplatform==1.105.0
+google-cloud-bigquery==3.34.0
+google-cloud-resource-manager==1.14.2
+google-cloud-storage==2.19.0
+google-genai==1.18.0
+google-generativeai==0.8.5
+websockets==15.0.1

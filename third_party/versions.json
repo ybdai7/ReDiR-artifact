@@ -1,0 +1,26 @@
+{
+  "toolshield": {
+    "repository": "https://github.com/CHATS-lab/ToolShield.git",
+    "commit": "905fe95a69021abb3fe49bd1c649ab29a0837fb5",
+    "license_file": "toolshield/LICENSE"
+  },
+  "memgen": {
+    "repository": "https://github.com/bingreeky/MemGen.git",
+    "commit": "970cc95af99b5008610e6b281619d181bc9b5ab9",
+    "license_file": null
+  },
+  "openhands": {
+    "repository": "https://github.com/OpenHands/OpenHands.git",
+    "tag": "0.54.0",
+    "commit": "4aae68ae53477d05010a509f1f1e3f02e61b1831",
+    "license_file": "openhands/LICENSE",
+    "patches": [
+      "openhands/openhands/mcp/client.py replaced by the MT-AgentRisk-compatible client"
+    ]
+  },
+  "mcpmark": {
+    "repository": "https://github.com/eval-sys/mcpmark.git",
+    "commit": "cd45b7f57923b9b3985467f5139927575f83141c",
+    "license_file": "mcpmark/LICENSE"
+  }
+}

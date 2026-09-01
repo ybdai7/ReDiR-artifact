@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+.env
+node_modules/
+*.egg-info/
+/data/
+/outputs/
+/checkpoints/
+/.cache/
+/workspaces/
+/OpenHands/
+/mcpmark-main/
+notion_state.json*

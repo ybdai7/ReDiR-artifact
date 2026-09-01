@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "redir-artifact"
+version = "0.1.0"
+description = "Research artifact for frozen-base latent safety control in multi-turn tool-using agents."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "aiohttp>=3.9",
+  "json-repair>=0.20",
+  "openai>=1.0",
+  "pydantic>=2.11,<3",
+  "pyyaml>=6",
+  "requests>=2.28",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+model = [
+  "accelerate>=1.10",
+  "datasets>=4.0",
+  "numpy>=2.1",
+  "omegaconf>=2.3",
+  "peft>=0.17",
+  "safetensors>=0.6",
+  "transformers>=4.55,<4.56",
+  "trl>=0.18",
+  "wandb>=0.21",
+]
+eval = [
+  "fastmcp==2.6.1",
+  "mcp==1.9.2",
+  "psycopg2-binary==2.9.12",
+  "pydantic-settings==2.9.1",
+  "tomli; python_version < '3.11'",
+]
+
+[project.scripts]
+redir-train = "redir.train:main"
+redir-serve = "latent_safety.server.openai_compatible:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+redir = ["*.yaml"]

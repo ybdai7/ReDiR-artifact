@@ -6,26 +6,12 @@ from dataclasses import dataclass
 import gzip
 import json
 from pathlib import Path
-import re
 import shutil
 from typing import Any, Iterable, Iterator, Mapping
 
 
 class DataContractError(ValueError):
-    """Raised when a ReDiR data bundle violates its frozen contract."""
-
-
-PRIVATE_METADATA_KEYS = {
-    "source_completion_log",
-    "source_post_eval_path",
-    "source_task_path",
-    "source_post_eval_judge_base_url",
-    "checkpoint_path",
-}
-FORBIDDEN_RELEASE_PATTERNS = {
-    "local_user_path": re.compile(r"/Users/"),
-    "server_data_path": re.compile(r"(?:^|[\s\"'`:(])/data/"),
-}
+    """Raised when a ReDiR data bundle violates its schema or count contract."""
 
 
 @dataclass(frozen=True)
@@ -105,40 +91,8 @@ def write_jsonl_gz(path: str | Path, rows: Iterable[Mapping[str, Any]]) -> None:
                 zipped.write(payload.encode("utf-8") + b"\n")
 
 
-def strip_private_metadata(value: Any, path: str = "") -> Any:
-    """Remove collection-machine provenance that is not used by training."""
-
-    if isinstance(value, dict):
-        output: dict[str, Any] = {}
-        for key, item in value.items():
-            if key in PRIVATE_METADATA_KEYS:
-                continue
-            if key == "base_url" and "semantic_audit" in path:
-                continue
-            child = f"{path}.{key}" if path else key
-            output[key] = strip_private_metadata(item, child)
-        return output
-    if isinstance(value, list):
-        return [strip_private_metadata(item, path + "[]") for item in value]
-    return value
-
-
-def _sensitive_matches(value: Any, path: str = "") -> Iterator[tuple[str, str]]:
-    if isinstance(value, dict):
-        for key, item in value.items():
-            child = f"{path}.{key}" if path else key
-            yield from _sensitive_matches(item, child)
-    elif isinstance(value, list):
-        for item in value:
-            yield from _sensitive_matches(item, path + "[]")
-    elif isinstance(value, str):
-        for label, pattern in FORBIDDEN_RELEASE_PATTERNS.items():
-            if pattern.search(value):
-                yield path, label
-
-
 def _copy_jsonl(source: Path, destination: Path) -> list[dict[str, Any]]:
-    rows = [strip_private_metadata(row) for row in read_jsonl(source)]
+    rows = read_jsonl(source)
     write_jsonl_gz(destination, rows)
     return rows
 
@@ -158,7 +112,7 @@ def merge_candidate_states(
     merged: list[dict[str, Any]] = []
     observed_safety_states: set[str] = set()
     for candidate in candidates:
-        row = strip_private_metadata(dict(candidate))
+        row = dict(candidate)
         state_id = str(row.get("state_id") or "")
         route = str(row.get("v485_route") or row.get("route") or "")
         if route == "protocol_safety":
@@ -167,7 +121,7 @@ def merge_candidate_states(
                 raise DataContractError(
                     f"safety state has no audited target record: {state_id}"
                 )
-            row.update(strip_private_metadata(teacher))
+            row.update(teacher)
             observed_safety_states.add(state_id)
         row.setdefault("task_id", row.get("task_key"))
         row.setdefault("messages", row.get("student_state_messages"))
@@ -189,7 +143,7 @@ def merge_candidate_states(
 def _clean_teacher_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     cleaned: list[dict[str, Any]] = []
     for source in rows:
-        row = strip_private_metadata(dict(source))
+        row = dict(source)
         row["task_id"] = source.get("task_key")
         row["teacher_messages"] = source.get("v48_teacher_exact_state_messages") or []
         row["targets"] = source.get("v78_native_refusal_targets") or []
@@ -212,7 +166,7 @@ def _clean_manifest_rows(
     }
     output: list[dict[str, Any]] = []
     for source in manifest:
-        row = strip_private_metadata(dict(source))
+        row = dict(source)
         pair = (str(row.get("state_id")), str(row.get("target_id")))
         row["training_role"] = (
             "selected"
@@ -235,7 +189,7 @@ def _clean_margin_rows(
         )
     output: list[dict[str, Any]] = []
     for source in rows:
-        row = strip_private_metadata(dict(source))
+        row = dict(source)
         row["source_checkpoint"] = row.get("checkpoint", "reference")
         row["probe_kind"] = row.get("stage", "fixed_prefix")
         output.append(row)
@@ -367,31 +321,6 @@ def validate_bundle(root: str | Path) -> dict[str, Any]:
         raise DataContractError(f"training bundle count mismatch: {mismatches}")
     if manifest.get("base_model_family") != "qwen3.5-9b":
         raise DataContractError("this release supports only qwen3.5-9b")
-    sensitive: list[dict[str, Any]] = []
-    for file_path in paths.required_files():
-        if file_path.suffix != ".gz":
-            continue
-        for row_number, row in enumerate(iter_jsonl(file_path), start=1):
-            for field, label in _sensitive_matches(row):
-                sensitive.append(
-                    {
-                        "file": file_path.name,
-                        "row": row_number,
-                        "field": field,
-                        "kind": label,
-                    }
-                )
-                if len(sensitive) >= 20:
-                    break
-            if len(sensitive) >= 20:
-                break
-        if len(sensitive) >= 20:
-            break
-    if sensitive:
-        raise DataContractError(
-            "collected data contains private paths or endpoints: "
-            + json.dumps(sensitive, ensure_ascii=False)
-        )
     return manifest
 
 

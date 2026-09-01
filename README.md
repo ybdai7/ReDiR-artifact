@@ -10,7 +10,7 @@ Users provide:
 2. a newly collected training-data directory following the documented schema;
 3. four GPUs for the full training recipe.
 
-The repository validates and sanitizes the collected data, initializes ReDiR
+The repository validates the collected data, initializes ReDiR
 from the base model, runs warmup and safety training, and selects the final
 checkpoint.
 
@@ -46,10 +46,6 @@ collected/
   sibling_targets.jsonl[.gz]
 ```
 
-The collected records must use portable task/workspace paths. Collection
-machine paths, usernames, private service URLs, and credentials are rejected by
-the data validator.
-
 Run the complete pipeline:
 
 ```bash
@@ -73,7 +69,7 @@ Override physical GPU indices when needed:
 
 One invocation performs:
 
-1. collected-data normalization and privacy validation;
+1. collected-data normalization and schema validation;
 2. deterministic latent/Weaver initialization from the external base model;
 3. identity and benign-behavior warmup;
 4. portable pair-manifest and baseline-metric preparation;
@@ -89,8 +85,7 @@ trajectory bundled by the artifact.
 ## Data construction
 
 `src/redir/build.py` converts newly collected rows into the internal portable
-bundle used by training. It removes collection-only provenance fields and
-rejects remaining identity-bearing paths or private endpoints.
+bundle used by training and validates the required fields and counts.
 
 The builder can be run independently:
 
@@ -147,7 +142,7 @@ export REDIR_CHECKPOINT_PATH="$PWD/runs/redir/final"
 configs/train.yaml       Public training recipe
 scripts/train.sh         End-to-end training entry point
 scripts/test.sh          Evaluation entry point
-src/redir/data.py        Data schema, sanitization, and validation
+src/redir/data.py        Data schema and validation
 src/redir/build.py       User-collected data builder
 src/redir/train.py       End-to-end training orchestrator
 src/redir/engine/        Internal implementation modules

@@ -19,12 +19,11 @@ repositories. Every subtree was exported from the exact commit recorded in
 
 OpenHands 0.54.0 is shipped with the MT-AgentRisk-compatible MCP client at
 `openhands/openhands/mcp/client.py`. Its source is identical to
-`../../src/latent_safety/eval/mtagentrisk/client.py`.
+`../../src/redir/eval/mtagentrisk/client.py`.
 
 ## Installation
 
-The core ReDiR package uses the public interface and engine under `src/redir/`
-plus model/protocol components under `src/latent_safety/`.
+The complete ReDiR implementation lives under `src/redir/`.
 Install the vendored runtime packages only when running agentic evaluation:
 
 ```bash

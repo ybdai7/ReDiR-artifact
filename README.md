@@ -160,6 +160,9 @@ src/redir/data.py        Data schema and validation
 src/redir/build.py       User-collected data builder
 src/redir/train.py       End-to-end training orchestrator
 src/redir/engine/        Internal implementation modules
-src/latent_safety/       Model, protocol, server, and evaluation integration
+src/redir/models/        Latent model and native protocol integration
+src/redir/server/        OpenAI-compatible local model server
+src/redir/eval/          MT-AgentRisk evaluation integration
+src/redir/datasets/      State and target construction utilities
 third_party/             Pinned collection/evaluation dependencies
 ```

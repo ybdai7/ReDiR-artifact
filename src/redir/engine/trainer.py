@@ -25,25 +25,25 @@ import torch.nn.functional as F
 from torch.optim import AdamW, SGD, Optimizer
 from transformers import GenerationConfig
 
-from latent_safety.data.mtagentrisk_v79 import (
+from redir.datasets.mtagentrisk_v79 import (
     V79_FORMAT_INSTRUCTION,
     V79_FORMAT_INSTRUCTION_SHA256,
     load_v79_frozen_target_contract,
 )
-from latent_safety.eval.mtagentrisk.turn_protocol import (
+from redir.eval.mtagentrisk.turn_protocol import (
     ProtocolState,
     ProtocolTurn,
     resolve_next_user_message,
 )
-from latent_safety.models.latent_memory.modeling import MemGenModel
-from latent_safety.models.latent_memory.native_boundary import (
+from redir.models.latent_memory.modeling import MemGenModel
+from redir.models.latent_memory.native_boundary import (
     BOUNDARY_INJECTION_MODE,
     render_generation_boundary_prompt,
 )
-from latent_safety.models.latent_memory.utils import log_trainable_params
-from latent_safety.server.gemma_native_protocol import parse_gemma_native_response
-from latent_safety.server.mistral_native_protocol import parse_mistral_native_response
-from latent_safety.server.qwen_native_protocol import parse_qwen_native_response
+from redir.models.latent_memory.utils import log_trainable_params
+from redir.server.gemma_native_protocol import parse_gemma_native_response
+from redir.server.mistral_native_protocol import parse_mistral_native_response
+from redir.server.qwen_native_protocol import parse_qwen_native_response
 from redir.engine.targets import (
     CanonicalTargetError,
     canonical_assistant_message_from_record,

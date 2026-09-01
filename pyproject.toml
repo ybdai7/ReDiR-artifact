@@ -41,7 +41,7 @@ eval = [
 [project.scripts]
 redir-collect = "redir.collect:main"
 redir-train = "redir.train:main"
-redir-serve = "latent_safety.server.openai_compatible:main"
+redir-serve = "redir.server.openai_compatible:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

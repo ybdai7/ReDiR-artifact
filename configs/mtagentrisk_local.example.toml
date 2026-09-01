@@ -1,11 +1,11 @@
 [llm.agent]
-model = "openai/latent-safety-local"
+model = "openai/redir-local"
 base_url = "http://127.0.0.1:8010/v1"
 api_key = "local"
 max_output_tokens = 4096
 
 [llm.env]
-model = "openai/latent-safety-local"
+model = "openai/redir-local"
 base_url = "http://127.0.0.1:8010/v1"
 api_key = "local"
 max_output_tokens = 4096

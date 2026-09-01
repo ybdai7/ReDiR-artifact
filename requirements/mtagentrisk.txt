@@ -1,8 +1,7 @@
-# Dependencies used by src/latent_safety/eval/mtagentrisk.
+# Dependencies used by src/redir/eval/mtagentrisk.
 #
-# OpenHands itself is installed by scripts/setup_local_venv.sh when
-# INSTALL_OPENHANDS=1, because the MT-AgentRisk harness expects a patched
-# OpenHands MCP client.
+# OpenHands and MCPMark are installed from the pinned source snapshots in
+# third_party/, as documented in the top-level README.
 fastmcp==2.6.1
 mcp==1.9.2
 psycopg2-binary==2.9.12

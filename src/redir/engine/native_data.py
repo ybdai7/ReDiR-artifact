@@ -8,8 +8,8 @@ import json
 import re
 from typing import Any
 
-from latent_safety.server.native_messages import normalize_native_messages
-from latent_safety.server.qwen_native_protocol import parse_qwen_native_response
+from redir.server.native_messages import normalize_native_messages
+from redir.server.qwen_native_protocol import parse_qwen_native_response
 
 
 DEFAULT_FILESYSTEM_TOOL_NAMES = (

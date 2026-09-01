@@ -102,7 +102,7 @@ if [[ "$REUSE_SERVER" != "1" ]]; then
 
   echo "Starting ReDiR endpoint at $SERVER_URL/v1"
   env PYTHONPATH="$REPO_ROOT/src:$VENDOR_PYTHONPATH${PYTHONPATH:+:$PYTHONPATH}" \
-    "$PYTHON_BIN" -m latent_safety.server.openai_compatible \
+    "$PYTHON_BIN" -m redir.server.openai_compatible \
       --backend latent \
       --config "$SERVER_CONFIG" \
       --host 127.0.0.1 \
@@ -139,7 +139,7 @@ env \
   MCP_FS_DEST_DIR="$OUTPUT_DIR/shared_workspace" \
   NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,0.0.0.0}" \
   no_proxy="${no_proxy:-${NO_PROXY:-localhost,127.0.0.1,0.0.0.0}}" \
-  "$PYTHON_BIN" -m latent_safety.eval.mtagentrisk.run_eval \
+  "$PYTHON_BIN" -m redir.eval.mtagentrisk.run_eval \
     --task-path "$TASK_PATH" \
     --agent-llm-config agent \
     --agent-llm-config-file "$EVAL_CONFIG" \

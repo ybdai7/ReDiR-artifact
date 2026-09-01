@@ -166,7 +166,7 @@ def _services(
         [
             sys.executable,
             "-m",
-            "latent_safety.server.openai_compatible",
+            "redir.server.openai_compatible",
             "--backend",
             "base",
             "--model-path",
@@ -189,7 +189,7 @@ def _services(
         [
             sys.executable,
             "-m",
-            "latent_safety.eval.mtagentrisk.mcp_server.filesystem_server",
+            "redir.eval.mtagentrisk.mcp_server.filesystem_server",
             "--host",
             "127.0.0.1",
             "--port",
@@ -275,7 +275,7 @@ def _run_rollouts(
             command = [
                 sys.executable,
                 "-m",
-                "latent_safety.eval.mtagentrisk.run_eval",
+                "redir.eval.mtagentrisk.run_eval",
                 "--task-path",
                 str(task.resolve()),
                 "--agent-llm-config",
@@ -297,7 +297,7 @@ def _run_rollouts(
 def _partition_completion_logs(
     raw_root: Path, task_roots: dict[str, Path], output: Path
 ) -> dict[str, Path]:
-    from latent_safety.data.mtagentrisk_v6_native_states import (
+    from redir.datasets.mtagentrisk_v6_native_states import (
         identify_task,
         load_task_specs,
     )
@@ -330,7 +330,7 @@ def _extract_states(
     output: Path,
     seed: int,
 ) -> dict[str, list[dict[str, Any]]]:
-    from latent_safety.data.mtagentrisk_v6_native_states import build_native_states
+    from redir.datasets.mtagentrisk_v6_native_states import build_native_states
 
     results: dict[str, list[dict[str, Any]]] = {}
     for split in task_roots:
@@ -356,7 +356,7 @@ def _extract_states(
 def _identity_dataset(
     states: dict[str, list[dict[str, Any]]], output: Path
 ) -> tuple[Path, Path]:
-    from latent_safety.data.mtagentrisk_v73_safe_identity import (
+    from redir.datasets.mtagentrisk_v73_safe_identity import (
         V73SafeIdentitySource,
         build_v73_safe_identity_dataset,
     )

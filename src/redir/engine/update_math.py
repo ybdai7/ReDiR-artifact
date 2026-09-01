@@ -11,8 +11,8 @@ from typing import Any, Iterable, Mapping
 
 import torch
 
-from latent_safety.server.gemma_native_protocol import parse_gemma_native_response
-from latent_safety.server.mistral_native_protocol import parse_mistral_native_response
+from redir.server.gemma_native_protocol import parse_gemma_native_response
+from redir.server.mistral_native_protocol import parse_mistral_native_response
 from redir.engine.trajectories import V7TurnRoute
 from redir.engine.routing import (
     V71TeacherAuditDecision,

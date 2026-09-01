@@ -1,0 +1,1 @@
+from redir.models.latent_memory.modeling import MemGenModel

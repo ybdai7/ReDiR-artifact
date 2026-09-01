@@ -23,8 +23,6 @@ class BundlePaths:
     teacher_targets: Path
     pair_manifest: Path
     benign_completions: Path
-    margin_family0: Path
-    margin_family123: Path
     manifest: Path
 
     @classmethod
@@ -38,8 +36,6 @@ class BundlePaths:
             teacher_targets=root / "teacher_targets.jsonl.gz",
             pair_manifest=root / "pair_manifest.jsonl.gz",
             benign_completions=root / "benign_completions.jsonl.gz",
-            margin_family0=root / "margin_bank_family0.jsonl.gz",
-            margin_family123=root / "margin_bank_family123.jsonl.gz",
             manifest=root / "manifest.json",
         )
 
@@ -51,8 +47,6 @@ class BundlePaths:
             self.teacher_targets,
             self.pair_manifest,
             self.benign_completions,
-            self.margin_family0,
-            self.margin_family123,
             self.manifest,
         )
 
@@ -179,23 +173,6 @@ def _clean_manifest_rows(
     return output
 
 
-def _clean_margin_rows(
-    rows: list[dict[str, Any]], *, expected_rounds: set[int]
-) -> list[dict[str, Any]]:
-    rounds = {int(row.get("round_index", -1)) for row in rows}
-    if rounds != expected_rounds:
-        raise DataContractError(
-            f"margin bank rounds {rounds} != {expected_rounds}"
-        )
-    output: list[dict[str, Any]] = []
-    for source in rows:
-        row = dict(source)
-        row["source_checkpoint"] = row.get("checkpoint", "reference")
-        row["probe_kind"] = row.get("stage", "fixed_prefix")
-        output.append(row)
-    return output
-
-
 def build_bundle(
     *,
     identity_train: Path,
@@ -206,8 +183,6 @@ def build_bundle(
     benign_completions: Path,
     selected_manifest: Path | None,
     sibling_targets: Path | None,
-    margin_family0: Path,
-    margin_family123: Path,
     output_dir: Path,
     source: str,
 ) -> dict[str, Any]:
@@ -230,15 +205,6 @@ def build_bundle(
         _clean_manifest_rows(manifest_rows, selected_rows, sibling_rows),
     )
     benign_rows = _copy_jsonl(benign_completions, paths.benign_completions)
-
-    family0_rows = _clean_margin_rows(
-        read_jsonl(margin_family0), expected_rounds={0}
-    )
-    family123_rows = _clean_margin_rows(
-        read_jsonl(margin_family123), expected_rounds={1, 2, 3}
-    )
-    write_jsonl_gz(paths.margin_family0, family0_rows)
-    write_jsonl_gz(paths.margin_family123, family123_rows)
 
     safety_rows = [row for row in merged_rows if row.get("route") == "safety"]
     benign_candidates = [row for row in merged_rows if row.get("route") == "benign"]
@@ -280,8 +246,6 @@ def build_bundle(
             "pair_manifest": len(manifest_rows),
             "active_pairs": sum(bool(row.get("active")) for row in manifest_rows),
             "benign_completions": len(benign_rows),
-            "margin_family0": len(family0_rows),
-            "margin_family123": len(family123_rows),
         },
         "notes": {
             "base_model_weights_included": False,
@@ -309,8 +273,6 @@ def validate_bundle(root: str | Path) -> dict[str, Any]:
         "candidate_states": len(read_jsonl(paths.safety_states)),
         "pair_manifest": len(read_jsonl(paths.pair_manifest)),
         "benign_completions": len(read_jsonl(paths.benign_completions)),
-        "margin_family0": len(read_jsonl(paths.margin_family0)),
-        "margin_family123": len(read_jsonl(paths.margin_family123)),
     }
     mismatches = {
         key: {"expected": counts.get(key), "observed": value}
@@ -338,8 +300,6 @@ def materialize_engine_inputs(root: str | Path, output: str | Path) -> BundlePat
         paths.teacher_targets: output / "teacher_targets.jsonl",
         paths.pair_manifest: output / "pair_manifest.jsonl",
         paths.benign_completions: output / "benign_completions.jsonl",
-        paths.margin_family0: output / "margin_family0.jsonl",
-        paths.margin_family123: output / "margin_family123.jsonl",
     }
     for source, destination in mapping.items():
         with gzip.open(source, "rb") as compressed, destination.open("wb") as raw:
@@ -352,8 +312,6 @@ def materialize_engine_inputs(root: str | Path, output: str | Path) -> BundlePat
         teacher_targets=mapping[paths.teacher_targets],
         pair_manifest=mapping[paths.pair_manifest],
         benign_completions=mapping[paths.benign_completions],
-        margin_family0=mapping[paths.margin_family0],
-        margin_family123=mapping[paths.margin_family123],
         manifest=paths.manifest,
     )
 

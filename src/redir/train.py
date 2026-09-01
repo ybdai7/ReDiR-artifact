@@ -70,8 +70,10 @@ def _warmup_config(
     data: Any,
     output: Path,
     semantic: dict[str, Any],
+    data_manifest: dict[str, Any],
 ) -> dict[str, Any]:
     config = deepcopy(template)
+    counts = dict(data_manifest["counts"])
     _disable_versioned_training(config)
     _remove_environment_interpolations(config)
     _set_model_paths(config, model, None)
@@ -105,11 +107,11 @@ def _warmup_config(
         "enabled": True,
         "records_per_update": int(semantic["warmup"]["records_per_update"]),
         "max_clean_refusal_fraction": 0.20,
-        "expected_train_tasks": 45,
-        "expected_dev_tasks": 10,
-        "min_train_records": 180,
-        "min_dev_records": 40,
-        "record_floor_contract": "v73_180_40",
+        "expected_train_tasks": int(counts["identity_train_tasks"]),
+        "expected_dev_tasks": int(counts["identity_dev_tasks"]),
+        "min_train_records": int(counts["identity_train"]),
+        "min_dev_records": int(counts["identity_dev"]),
+        "record_floor_contract": "portable",
         "attack_audit_path": str(data.teacher_targets),
     }
     run = config["run"]
@@ -255,15 +257,9 @@ def _safety_config(
             "expected_sibling_pairs": -1,
         }
     )
+    final["fixed_margin_enabled"] = False
     config["v796_posthoc_diagnostics"].update(
-        {
-            "enabled": False,
-            "mode": "cross_margin",
-            "checkpoint_label": "current",
-            "source_checkpoint_label": "D8",
-            "round_indices": [0, 1, 2, 3],
-            "probe_paths": [str(data.margin_family0), str(data.margin_family123)],
-        }
+        {"enabled": False, "probe_paths": []}
     )
     run = config["run"]
     run["output_dir"] = str(output)
@@ -352,37 +348,8 @@ def _select_learning_rate(calibration_dirs: dict[float, Path], config: dict[str,
 
 def _build_collected_bundle(source: Path, output: Path) -> None:
     sources = collected_sources(source)
-    margin_family0 = next(
-        (
-            path
-            for path in (
-                source / "margin_bank_family0.jsonl.gz",
-                source / "margin_bank_family0.jsonl",
-            )
-            if path.is_file()
-        ),
-        None,
-    )
-    margin_family123 = next(
-        (
-            path
-            for path in (
-                source / "margin_bank_family123.jsonl.gz",
-                source / "margin_bank_family123.jsonl",
-            )
-            if path.is_file()
-        ),
-        None,
-    )
-    if margin_family0 is None or margin_family123 is None:
-        raise FileNotFoundError(
-            "collected data requires margin_bank_family0 and "
-            "margin_bank_family123 JSONL files"
-        )
     build_bundle(
         **sources,
-        margin_family0=margin_family0,
-        margin_family123=margin_family123,
         output_dir=output,
         source="user-collected-qwen3.5-9b-data",
     )
@@ -423,6 +390,7 @@ def main() -> None:
         data=engine_data,
         output=warmup_dir,
         semantic=semantic,
+        data_manifest=data_manifest,
     )
     warmup_config_path = configs_dir / "warmup.yaml"
     _write_yaml(warmup_config_path, warmup_config)

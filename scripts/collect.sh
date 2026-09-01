@@ -21,5 +21,5 @@ fi
   exit 2
 }
 
-export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$REPO_ROOT/src:$REPO_ROOT/third_party/openhands:$REPO_ROOT/third_party/mcpmark${PYTHONPATH:+:$PYTHONPATH}"
 exec "$PYTHON_BIN" -m redir.collect "$@"

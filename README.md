@@ -7,7 +7,7 @@ It contains neither base-model weights nor previously collected training data.
 Users provide:
 
 1. a Qwen3.5-9B model path;
-2. a newly collected training-data directory following the documented schema;
+2. a local checkout of the public MT-AgentRisk dataset;
 3. four GPUs for the full training recipe.
 
 The repository validates the collected data, initializes ReDiR
@@ -24,39 +24,47 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[model]"
+python -m pip install -e ".[eval]"
+SKIP_VSCODE_BUILD=1 python -m pip install -e third_party/openhands
+python -m pip install -e third_party/mcpmark
 ```
 
-## Collect and normalize data
+## Collect data
 
-Prepare a collection directory:
+Download the public benchmark without adding it to this repository:
 
-```text
-collected/
-  identity_train.jsonl[.gz]
-  identity_dev.jsonl[.gz]
-  candidate_states.jsonl[.gz]
-  teacher_targets.jsonl[.gz]
-  pair_manifest.jsonl[.gz]
-  benign_completions.jsonl[.gz]
-  margin_bank_family0.jsonl[.gz]
-  margin_bank_family123.jsonl[.gz]
-
-  # Optional reference annotations
-  selected_manifest.jsonl[.gz]
-  sibling_targets.jsonl[.gz]
+```bash
+git clone https://huggingface.co/datasets/CHATS-Lab/MT-AgentRisk \
+  /path/to/MT-AgentRisk
 ```
 
-Normalize and validate the newly collected files:
+Run fresh Qwen3.5-9B collection:
 
 ```bash
 ./scripts/collect.sh \
-  --source-dir /path/to/raw_collection \
-  --output collected/redir
+  --dataset-root /path/to/MT-AgentRisk \
+  --model /path/to/Qwen3.5-9B \
+  --output collected/redir \
+  --split-seed 42
 ```
 
-`collect.sh` does not contain or download any previously collected ReDiR data.
-It assembles the files produced by the user's own OpenHands/teacher collection
-run into the bundle consumed by training.
+The collector discovers the filesystem multi-turn pool, deterministically
+selects 55 tasks, and splits them into 45 train and 10 dev tasks. It separately
+samples 10 filesystem benign tasks and splits them into 8 train and 2 dev
+tasks. It then starts the local base-model server, filesystem MCP server, and
+OpenHands; collects native decision states; uses the same Qwen3.5-9B model as a
+collapsed-view safety teacher; and writes the portable bundle to
+`collected/redir/bundle`.
+
+Inspect task selection without loading the model:
+
+```bash
+./scripts/collect.sh \
+  --dataset-root /path/to/MT-AgentRisk \
+  --model /path/to/Qwen3.5-9B \
+  --output /tmp/redir-collection-plan \
+  --dry-run
+```
 
 ## End-to-end training
 
@@ -65,7 +73,7 @@ Run the complete pipeline:
 ```bash
 ./scripts/train.sh \
   --model /path/to/Qwen3.5-9B \
-  --collected-dir collected/redir \
+  --collected-dir collected/redir/bundle \
   --output runs/redir
 ```
 
@@ -74,7 +82,7 @@ Override physical GPU indices when needed:
 ```bash
 ./scripts/train.sh \
   --model /path/to/Qwen3.5-9B \
-  --collected-dir collected/redir \
+  --collected-dir collected/redir/bundle \
   --cuda-devices 4,5,6,7 \
   --output runs/redir
 ```
@@ -106,14 +114,12 @@ The builder can be run independently:
 ```bash
 python -m redir.build \
   --source /path/to/collected \
-  --margin-family0 /path/to/collected/margin_bank_family0.jsonl.gz \
-  --margin-family123 /path/to/collected/margin_bank_family123.jsonl.gz \
   --output /path/to/generated_bundle
 ```
 
-The source tasks and collection environments are external inputs. The vendored
+The source tasks are read from the external MT-AgentRisk checkout. The vendored
 OpenHands, MCPMark, and ToolShield source trees provide the execution runtime;
-they do not contain the submission's previously collected trajectories.
+they do not contain previously collected trajectories.
 
 ## Configuration
 
@@ -127,20 +133,12 @@ Generate all stage configurations without loading a model:
 ```bash
 ./scripts/train.sh \
   --model /path/to/Qwen3.5-9B \
-  --collected-dir /path/to/collected \
+  --collected-dir collected/redir/bundle \
   --output /tmp/redir-dry-run \
   --dry-run
 ```
 
 ## Evaluation
-
-Install the vendored agent runtime:
-
-```bash
-python -m pip install -e ".[eval]"
-SKIP_VSCODE_BUILD=1 python -m pip install -e third_party/openhands
-python -m pip install -e third_party/mcpmark
-```
 
 Evaluate one task with the selected checkpoint:
 
@@ -155,9 +153,9 @@ export REDIR_CHECKPOINT_PATH="$PWD/runs/redir/final"
 ```text
 configs/train.yaml       Public training recipe
 scripts/train.sh         End-to-end training entry point
-scripts/collect.sh       Collected-data assembly entry point
+scripts/collect.sh       Fresh MT-AgentRisk collection entry point
 scripts/test.sh          Evaluation entry point
-src/redir/collect.py     Collection bundle orchestrator
+src/redir/collect.py     Task split, rollout, self-teacher, and bundle collector
 src/redir/data.py        Data schema and validation
 src/redir/build.py       User-collected data builder
 src/redir/train.py       End-to-end training orchestrator

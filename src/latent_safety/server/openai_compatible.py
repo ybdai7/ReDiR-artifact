@@ -630,6 +630,9 @@ class BaseChatBackend:
 
 class Handler(BaseHTTPRequestHandler):
     backend: LatentChatBackend
+    completion_log_dir: Path | None = None
+    completion_log_lock = threading.Lock()
+    completion_log_counter = 0
 
     def do_GET(self) -> None:
         if self.path == "/v1/models":
@@ -645,6 +648,7 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("content-length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
             response = self.backend.complete(payload)
+            self._write_completion_log(payload, response)
             self._send_json(response)
         except Exception as exc:
             LOGGER.exception("chat completion failed")
@@ -661,6 +665,25 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _write_completion_log(
+        self, request_payload: dict[str, Any], response_payload: dict[str, Any]
+    ) -> None:
+        directory = type(self).completion_log_dir
+        if directory is None:
+            return
+        with type(self).completion_log_lock:
+            type(self).completion_log_counter += 1
+            index = type(self).completion_log_counter
+        record = {
+            "timestamp": time.time(),
+            "messages": request_payload.get("messages") or [],
+            "kwargs": {"tools": request_payload.get("tools") or []},
+            "request": request_payload,
+            "response": response_payload,
+        }
+        path = directory / f"completion_{index:08d}.json"
+        path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -672,6 +695,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--weaver-device", default=None)
     parser.add_argument("--assistant-generation-prefix", default="")
+    parser.add_argument("--completion-log-dir", type=Path)
     return parser.parse_args()
 
 
@@ -692,6 +716,9 @@ def main() -> None:
         if args.model_path is None:
             raise ValueError("--model-path is required for base backend")
         Handler.backend = BaseChatBackend(args.model_path, args.device)
+    if args.completion_log_dir is not None:
+        args.completion_log_dir.mkdir(parents=True, exist_ok=True)
+        Handler.completion_log_dir = args.completion_log_dir.resolve()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     LOGGER.info("Serving %s safety endpoint at http://%s:%d/v1", args.backend, args.host, args.port)
     server.serve_forever()

@@ -3826,12 +3826,15 @@ class MaskedOpdTrainer:
                 "v73_180_40": (180, 40),
                 "qwen3_8b_160_30": (160, 30),
             }
-            expected_record_floors = record_floor_contracts.get(
-                self.v73_record_floor_contract
+            portable_identity = self.v73_record_floor_contract == "portable"
+            expected_record_floors = (
+                (self.v73_min_train_records, self.v73_min_dev_records)
+                if portable_identity
+                else record_floor_contracts.get(self.v73_record_floor_contract)
             )
             if expected_record_floors is None:
                 raise ValueError(
-                    "unknown V7.3 identity record-floor contract: "
+                    "unknown identity record-floor contract: "
                     f"{self.v73_record_floor_contract}"
                 )
             if self.v73_record_floor_contract == "qwen3_8b_160_30":
@@ -3846,14 +3849,15 @@ class MaskedOpdTrainer:
                         "reasoner and Weaver"
                     )
             if (
-                self.v73_expected_train_tasks != 45
-                or self.v73_expected_dev_tasks != 10
-                or (
-                    self.v73_min_train_records,
-                    self.v73_min_dev_records,
+                not portable_identity
+                and (
+                    self.v73_expected_train_tasks != 45
+                    or self.v73_expected_dev_tasks != 10
                 )
-                != expected_record_floors
-            ):
+            ) or (
+                self.v73_min_train_records,
+                self.v73_min_dev_records,
+            ) != expected_record_floors:
                 raise ValueError(
                     "V7.3 safe identity coverage does not match its registered "
                     "record-floor contract"

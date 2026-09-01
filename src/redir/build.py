@@ -61,16 +61,12 @@ def collected_sources(root: Path) -> dict[str, Path | None]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--margin-family0", type=Path, required=True)
-    parser.add_argument("--margin-family123", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
 
     args = parser.parse_args()
     sources = collected_sources(args.source.resolve())
     result = build_bundle(
         **sources,
-        margin_family0=args.margin_family0.resolve(),
-        margin_family123=args.margin_family123.resolve(),
         output_dir=args.output.resolve(),
         source="user-collected-qwen3.5-9b-data",
     )

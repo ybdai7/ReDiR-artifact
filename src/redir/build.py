@@ -23,7 +23,12 @@ def collected_sources(root: Path) -> dict[str, Path | None]:
         "identity_train": _resolve_file(data, "identity_train.jsonl.gz", "identity_train.jsonl"),
         "identity_dev": _resolve_file(data, "identity_dev.jsonl.gz", "identity_dev.jsonl"),
         "candidate_states": _resolve_file(
-            data, "formal_candidate_train.jsonl.gz", "candidate_states.jsonl.gz", "candidate_states.jsonl"
+            data,
+            "formal_candidate_train.jsonl.gz",
+            "candidate_states.jsonl.gz",
+            "candidate_states.jsonl",
+            "safety_states.jsonl.gz",
+            "safety_states.jsonl",
         ),
         "audited_targets": _resolve_file(
             data, "teacher_audited_targets.jsonl.gz", "teacher_targets.jsonl.gz", "teacher_targets.jsonl"

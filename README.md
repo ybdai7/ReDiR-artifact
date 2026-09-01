@@ -26,7 +26,7 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[model]"
 ```
 
-## End-to-end training
+## Collect and normalize data
 
 Prepare a collection directory:
 
@@ -46,12 +46,26 @@ collected/
   sibling_targets.jsonl[.gz]
 ```
 
+Normalize and validate the newly collected files:
+
+```bash
+./scripts/collect.sh \
+  --source-dir /path/to/raw_collection \
+  --output collected/redir
+```
+
+`collect.sh` does not contain or download any previously collected ReDiR data.
+It assembles the files produced by the user's own OpenHands/teacher collection
+run into the bundle consumed by training.
+
+## End-to-end training
+
 Run the complete pipeline:
 
 ```bash
 ./scripts/train.sh \
   --model /path/to/Qwen3.5-9B \
-  --collected-dir /path/to/collected \
+  --collected-dir collected/redir \
   --output runs/redir
 ```
 
@@ -60,7 +74,7 @@ Override physical GPU indices when needed:
 ```bash
 ./scripts/train.sh \
   --model /path/to/Qwen3.5-9B \
-  --collected-dir /path/to/collected \
+  --collected-dir collected/redir \
   --cuda-devices 4,5,6,7 \
   --output runs/redir
 ```
@@ -141,7 +155,9 @@ export REDIR_CHECKPOINT_PATH="$PWD/runs/redir/final"
 ```text
 configs/train.yaml       Public training recipe
 scripts/train.sh         End-to-end training entry point
+scripts/collect.sh       Collected-data assembly entry point
 scripts/test.sh          Evaluation entry point
+src/redir/collect.py     Collection bundle orchestrator
 src/redir/data.py        Data schema and validation
 src/redir/build.py       User-collected data builder
 src/redir/train.py       End-to-end training orchestrator
